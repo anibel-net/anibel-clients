@@ -1,0 +1,17 @@
+query SliderQuery($offset: Int!, $limit: Int!) {
+  getSlider(offset: $offset, limit: $limit) {
+    id
+    title {
+      ru
+      be
+      en
+    }
+    content {
+      ru
+      be
+      en
+    }
+    link
+    img
+  }
+}

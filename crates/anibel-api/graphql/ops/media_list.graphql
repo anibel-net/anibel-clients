@@ -1,0 +1,31 @@
+# Catalog cards only. Avoid the full media document (and URL fields
+# that the server can 500 on for a bad poster) — that aborts the whole page.
+fragment MediaCardFields on Media {
+  mediaId
+  mediaType
+  slug
+  title {
+    ru
+    be
+    en
+    alt
+  }
+  poster
+  year
+  status
+  language
+  genres
+  rating
+  hidden
+}
+
+query MediaListQuery($mediaType: MediaTypes!, $offset: Int!, $limit: Int!, $filters: MediaFilters) {
+  getMediaList(mediaType: $mediaType, offset: $offset, limit: $limit, filters: $filters) {
+    docs {
+      ...MediaCardFields
+    }
+    totalDocs
+    limit
+    offset
+  }
+}

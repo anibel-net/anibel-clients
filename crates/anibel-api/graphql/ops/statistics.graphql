@@ -1,0 +1,9 @@
+query StatisticsQuery {
+  getStatistics {
+    anime
+    manga
+    cinema
+    games
+    users
+  }
+}

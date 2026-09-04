@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "core",
+    "crates/anibel-domain",
+    "crates/anibel-api",
+    "crates/anibel-player",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"

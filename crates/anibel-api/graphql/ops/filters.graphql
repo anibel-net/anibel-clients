@@ -1,0 +1,11 @@
+query FiltersQuery($mediaType: MediaTypes) {
+  getFilters(mediaType: $mediaType) {
+    genres
+    years
+    types
+    studies
+    translators
+    dubbers
+    editors
+  }
+}

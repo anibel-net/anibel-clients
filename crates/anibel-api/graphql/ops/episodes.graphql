@@ -1,0 +1,22 @@
+fragment EpisodeFields on Episode {
+  id
+  episode
+  endEpisode
+  title
+  url
+  resource
+  type
+  released
+  watched
+}
+
+query EpisodesQuery($mediaId: String!, $type: String!, $resource: Int!, $offset: Int, $limit: Int) {
+  episodes(mediaId: $mediaId, type: $type, resource: $resource, offset: $offset, limit: $limit) {
+    docs {
+      ...EpisodeFields
+    }
+    totalDocs
+    limit
+    offset
+  }
+}

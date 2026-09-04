@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Anibel.App.Views.CatalogPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Anibel.App.Views"
+    xmlns:vm="using:Anibel.App.ViewModels"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolVis" />
+    </Page.Resources>
+
+    <Grid Padding="16,8,16,0" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Spacing="8">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <TextBlock Text="{x:Bind Vm.Title, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
+                <TextBlock Text="{x:Bind Vm.Stats, Mode=OneWay}" VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <CommandBar Grid.Column="1" DefaultLabelPosition="Right" OverflowButtonVisibility="Collapsed"
+                        Background="Transparent" VerticalAlignment="Center">
+                <AppBarButton Icon="Refresh" Label="Абнавіць" Click="OnRefreshClick"
+                              ToolTipService.ToolTip="Абнавіць каталог з сеткі" />
+                <AppBarToggleButton x:Name="GridToggle" Icon="ViewAll" Label="Сетка" IsChecked="True"
+                                    Click="OnGridToggle" />
+                <AppBarToggleButton x:Name="ListToggle" Icon="List" Label="Спіс" Click="OnListToggle" />
+            </CommandBar>
+        </Grid>
+        </StackPanel>
+
+        <Expander Grid.Row="1" Header="Фільтры" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                  IsExpanded="False">
+            <StackPanel Spacing="10" Padding="0,8,0,4">
+                <local:WrapPanel HorizontalSpacing="12" VerticalSpacing="8">
+                    <ComboBox MinWidth="120" Header="Год" ItemsSource="{x:Bind Vm.Years, Mode=OneWay}"
+                              SelectedIndex="{x:Bind Vm.SelectedYearIndex, Mode=TwoWay}" />
+                    <ComboBox MinWidth="140" Header="Статус" SelectedIndex="{x:Bind Vm.SelectedStatusIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="Усе" />
+                        <ComboBoxItem Content="У выхадзе" />
+                        <ComboBoxItem Content="Завяршыўся" />
+                    </ComboBox>
+                    <ComboBox MinWidth="140" Header="Краіна"
+                              ItemsSource="{x:Bind Vm.Countries, Mode=OneWay}"
+                              SelectedIndex="{x:Bind Vm.SelectedCountryIndex, Mode=TwoWay}" />
+                    <ComboBox MinWidth="140" Header="Тып"
+                              ItemsSource="{x:Bind Vm.ContentTypes, Mode=OneWay}"
+                              SelectedIndex="{x:Bind Vm.SelectedTypeIndex, Mode=TwoWay}"
+                              Visibility="{x:Bind Vm.ShowTypeFilter, Mode=OneWay, Converter={StaticResource BoolVis}}" />
+                    <StackPanel x:Name="LanguageFilters"
+                                VerticalAlignment="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4"
+                                Visibility="Collapsed">
+                        <ToggleButton Content="Субцітры" IsChecked="{x:Bind Vm.SubSelected, Mode=TwoWay}" />
+                        <ToggleButton Content="Дубляж" IsChecked="{x:Bind Vm.DubSelected, Mode=TwoWay}" />
+                    </StackPanel>
+                </local:WrapPanel>
+
+                <TextBlock Text="Жанры" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ItemsControl ItemsSource="{x:Bind Vm.Genres, Mode=OneWay}"
+                              HorizontalAlignment="Stretch">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <local:WrapPanel HorizontalSpacing="6" VerticalSpacing="6" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:GenreChip">
+                            <ToggleButton Content="{x:Bind Label}" IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                          Padding="10,4" CornerRadius="8" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Expander>
+
+        <Grid Grid.Row="2">
+            <local:MediaCollectionView ItemsSource="{x:Bind Vm.Items, Mode=OneWay}"
+                                       IsGridMode="{x:Bind Vm.IsGridMode, Mode=OneWay}"
+                                       HasMore="{x:Bind Vm.HasMore, Mode=OneWay}"
+                                       ShowSkeleton="{x:Bind Vm.IsBusy, Mode=OneWay}"
+                                       MediaClick="OnMediaClick" LoadMoreRequested="OnLoadMore" />
+            <ProgressBar VerticalAlignment="Bottom" IsIndeterminate="True"
+                         Visibility="{x:Bind Vm.IsLoadingMore, Mode=OneWay, Converter={StaticResource BoolVis}}" />
+            <local:EmptyState Title="Нічога не знойдзена"
+                              Message="Паспрабуйце іншыя фільтры або абнавіце каталог."
+                              Glyph="&#xE71C;"
+                              ActionText="Абнавіць"
+                              ActionClick="OnRefreshClick"
+                              Visibility="{x:Bind Vm.ShowEmptyState, Mode=OneWay, Converter={StaticResource BoolVis}}" />
+            <local:EmptyState Title="Прабачце!"
+                              Message="{x:Bind Vm.StatusMessage, Mode=OneWay}"
+                              Glyph="&#xE7BA;"
+                              ActionText="Абнавіць"
+                              SecondaryText="Капіяваць"
+                              ActionClick="OnRefreshClick"
+                              SecondaryClick="OnCopyStatusClick"
+                              Visibility="{x:Bind Vm.ShowErrorState, Mode=OneWay, Converter={StaticResource BoolVis}}" />
+        </Grid>
+    </Grid>
+</Page>

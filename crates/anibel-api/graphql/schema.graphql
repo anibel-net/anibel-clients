@@ -1,0 +1,906 @@
+enum MediaTypes {
+  anime
+  manga
+  cinema
+  games
+  books
+}
+
+enum StatusRemoval {
+  SUCCESS
+  ERROR
+}
+
+type Query {
+  user(username: String!): Profile
+  favorites(username: String!, mediaType: MediaTypes, offset: Int!, limit: Int!): FavoritePagination
+  marks(username: String!, mediaType: MediaTypes, offset: Int!, limit: Int!): MarksPagination
+  users(offset: Int!, limit: Int!, query: String, role: String): UsersPagination!
+  status(username: String!, mediaType: MediaTypes!): Status!
+  uploads: [File]
+  media(slug: String!, mediaType: MediaTypes): Media
+  getMediaList(offset: Int!, limit: Int!, mediaType: MediaTypes!, filters: MediaFilters): MediaPagination
+  episodes(mediaId: String!, type: String!, resource: Int!, offset: Int, limit: Int): EpisodePagination
+  chapters(mediaId: String!, offset: Int, limit: Int): ChapterPagination
+  volumes(mediaId: String!, offset: Int, limit: Int): VolumesPagination
+  volume(mediaId: String!, volume: Int): Volume
+  chapter(slug: String!, chapter: Float!): Chapter
+  randomMedia: Media
+  search(query: String!, limit: Int): [Media]!
+  getUpdatesList(offset: Int!, limit: Int!, type: UpdateType): UpdateDto!
+  getRecommendations(type: RecommendationTypes!, limit: Int): [Media]!
+  getSchedule: [Schedule]!
+  getTrends(type: RecommendationTypes!, date: TrendDates!, limit: Int): [Media]!
+  getSlider(offset: Int!, limit: Int!, query: String): [Slide]!
+  getFilters(mediaType: MediaTypes, all: Boolean): Filters
+  getStatistics: Statistics
+  getStatisticsHistory(offset: Int!, limit: Int!): StatisticsPagination!
+  reports(offset: Int!, limit: Int!, query: String, type: ReportType, closed: Boolean): ReportPagination!
+  comments(mediaType: MediaTypes!, mediaId: String!, limit: Int!, offset: Int!): commentsPagination
+  latestComments(limit: Int!, offset: Int!, query: String): commentsPagination
+}
+
+
+
+
+
+type FavoritePagination {
+  docs: [Media!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type UsersPagination {
+  docs: [Profile!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type MarksPagination {
+  docs: [ProfileMark!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type Social {
+  vk: String
+  tg: String
+}
+
+type Oauth {
+  tg: String
+}
+
+type Verification {
+  email: Boolean
+}
+
+type Title {
+  ru: String!
+  be: String!
+  en: String
+  alt: [String]
+}
+
+type Status {
+  watching: Int
+  watched: Int
+  dropped: Int
+  planned: Int
+}
+
+type ProfileMark {
+  markId: ID
+  status: MarkStatus
+  media: Media
+}
+
+
+type Profile {
+  id: String!
+  username: String!
+  email: String
+  role: String!
+  social: Social
+  displayName: String
+  avatar: String
+  wallpaper: String
+  bio: String
+  language: String
+  oauth: Oauth
+  verification: Verification
+  favorites: [Media]
+  status: Status
+  marks: [ProfileMark]
+}
+
+input SocialInput {
+  vk: String
+  tg: String
+}
+
+input ProfileInput {
+  id: String!
+  social: SocialInput
+  wallpaper: String
+  bio: String
+  avatar: String
+  displayName: String
+  username: String
+  role: String
+}
+
+type User {
+  id: String!
+  username: String!
+  email: String
+  role: String!
+  token: String!
+  avatar: String
+}
+
+input FavoriteInput {
+  mediaId: String!
+  mediaType: MediaTypes!
+}
+
+input MarkAsInput {
+  mediaId: String!
+  mediaType: MediaTypes!
+  status: MarkStatus!
+}
+
+enum MarkStatus {
+  notselected
+  watching
+  watched
+  dropped
+  planned
+  played
+  read
+  reading
+  playing
+}
+
+type Mutation {
+  createUser(email: String!, username: String!, password: String!): User
+  updateUser(input: ProfileInput): Profile
+  removeUser(id: String!): StatusRemoval
+  addFavorite(input: FavoriteInput!): Media
+  markAs(input: MarkAsInput!): StatusRemoval
+  removeMark(input: MarkAsInput!): StatusRemoval
+  removeFavorite(input: FavoriteInput!): StatusRemoval
+  login(username: String!, password: String!): User
+  oauth(type: OauthType!): String
+  verifyOauth(type: OauthType!, payload: OauthPayload!): User
+  upload(file: Upload!, type: UploadType!): File!
+  uploadMany(files: [UplaodMany!]!): [File!]!
+  addEpisode(input: AddEpisodeInput!): Episode
+  addHistoryRecord(input: HistoryRecordInput!): OperationStatus
+  removeHistoryRecord(input: HistoryRecordInput!): OperationStatus
+  editEpisode(input: EditEpisodeInput!): Episode
+  removeEpisode(id: String!): OperationStatus
+  addMedia(input: AddMediaInput!): Media
+  editMedia(input: EditMediaInput!): Media
+  removeMedia(mediaId: String!): OperationStatus
+  addChapter(input: AddChapterInput!): Chapter
+  editChapter(input: EditChapterInput!): Chapter
+  removeChapter(id: String!): OperationStatus
+  addVolume(input: AddVolumeInput!): Volume
+  editVolume(input: EditVolumeInput!): Volume
+  removeVolume(id: String!): OperationStatus
+  addSlide(input: SliderInput!): Slide!
+  editSlide(input: EditSliderInput!): Slide!
+  addRating(rating: Float, mediaType: MediaTypes, mediaId: String): RatingStatus!
+  removeSlide(id: String): SlideRemoved!
+  mediaReport(mediaType: MediaTypes!, mediaId: String!, videoType: ReportVideoType, connections: [Int], errorType: ReportErrors, message: String): Report
+  report(message: String!): Report
+  addComment(input: AddCommentInput!): Comment
+  editComment(input: EditCommentInput!): Comment
+  removeComment(id: String!): CommentRemoved
+}
+
+type Subscription {
+  users: User
+}
+
+enum OauthType {
+  tg
+  vk
+  google
+}
+
+scalar OauthPayload
+
+scalar Upload
+
+enum UploadType {
+  ANIME
+  MANGA
+  SLIDERS
+  GAMES
+  MEDIA
+}
+
+input UplaodMany {
+  file: Upload!
+  type: UploadType!
+}
+
+type FileUrl {
+  thumbnail: String
+  original: String
+}
+
+type File {
+  userId: String
+  id: String
+  path: String
+  driveId: String
+  extension: String
+}
+
+scalar BigNumber
+
+enum MediaLanguage {
+  sub
+  dub
+}
+
+enum MediaStatus {
+  finished
+  ongoing
+}
+
+input MediaFilters {
+  language: [MediaLanguage]
+  genres: [String]
+  studies: [String]
+  year: [Int]
+  status: MediaStatus
+  country: String
+  translators: [String]
+  dubbers: [String]
+  editors: [String]
+  typpers: [String]
+  cleanners: [String]
+  programmers: [String]
+  franchises: [String]
+  audioEngineers: [String]
+  hidden: Boolean
+  type: [String]
+  query: String
+  onlyDrafts: Boolean
+}
+
+type MediaPagination {
+  docs: [Media!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type Description {
+  ru: String
+  be: String
+  en: String
+}
+
+type Instructions {
+  ru: String
+  be: String
+  en: String
+}
+
+type Duraction {
+  start: Float
+  end: Float
+}
+
+type MediaDate {
+  created: BigNumber
+  updated: BigNumber
+}
+
+type EpisodePagination {
+  docs: [Episode!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type ChapterPagination {
+  docs: [Chapter!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type VolumesPagination {
+  docs: [Volume!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type Volume {
+  id: ID
+  mediaId: String
+  chapters: [VolumeChapter]
+  volume: Int
+  date: VolumeDate
+  released: BigNumber
+}
+
+type Episode {
+  id: ID
+  mediaId: String
+  mediaType: String
+  contentType: String
+  type: String!
+  episode: Float!
+  endEpisode: Float
+  title: String
+  url: String!
+  resource: Int!
+  thumbnail: String
+  view: Int
+  date: MediaDate
+  released: BigNumber
+  watched: Boolean
+}
+
+type RatingStats {
+  total: Int
+  one: Int
+  two: Int
+  three: Int
+  four: Int
+  five: Int
+}
+
+enum Featured {
+  belarus
+}
+
+
+type Media {
+  mediaId: ID
+  mediaType: String
+  contentType: String
+  slug: String!
+  title: Title
+  description: Description
+  instructions: Instructions
+  disableComments: Boolean
+  studio: String
+  status: String!
+  poster: String!
+  wallpaper: String
+  country: String
+  year: Int!
+  duraction: Duraction
+  episodes: [Episode]
+  chapters: [Chapter]
+  view: Int
+  trailer: String
+  date: MediaDate
+  donation: String
+  download: String
+  language: [MediaLanguage!]!
+  recommendations: [Media]
+  translators: [String]
+  relations: [Media]
+  franchise: String
+  dubbers: [String]
+  programmers: [String]
+  audioEngineers: [String]
+  editors: [String]
+  genres: [String]
+  cleanners: [String]
+  typpers: [String]
+  isBelarusianAuthor: Boolean
+  hidden: Boolean
+  rating: Float
+  iRated: Float
+  ratingStats: RatingStats
+  markStats: MarkStats
+  dmca: Boolean
+  mark: Mark
+  favorite: Boolean
+  featured: Featured
+  volumes: [Volume]
+}
+
+type MarkStats {
+  total: Int
+  watching: Int
+  watched: Int
+  dropped: Int
+  planned: Int
+  played: Int
+  read: Int
+  reading: Int
+  playing: Int
+}
+
+type Mark {
+  markId: ID
+  status: MarkStatus
+  media: Media
+}
+
+input TitleInput {
+  ru: String!
+  be: String!
+  en: String
+  alt: [String]
+}
+
+input DescriptionInput {
+  ru: String
+  be: String
+  en: String
+}
+
+input InstructionsInput {
+  ru: String
+  be: String
+  en: String
+}
+
+input EpisodeInput {
+  end: Int!
+}
+
+enum OperationStatus {
+  SUCCESS
+  ERROR
+}
+
+type Images {
+  large: String!
+  thumbnail: String
+}
+
+input ImagesInput {
+  large: String!
+  thumbnail: String!
+}
+
+type Chapter {
+  id: ID
+  chapter: Float!
+  endChapter: Float
+  title: String
+  images: [Images!]!
+  media: Media
+  view: Int
+  date: MangaDate
+  released: BigNumber
+  read: Boolean
+}
+
+type MangaDate {
+  created: BigNumber
+  updated: BigNumber
+}
+
+type VolumeDate {
+  created: BigNumber
+  updated: BigNumber
+}
+
+input AddEpisodeInput {
+  mediaId: String!
+  mediaType: MediaTypes!
+  type: String!
+  episode: Float!
+  endEpisode: Float
+  title: String
+  url: String!
+  resource: Int!
+  thumbnail: String
+  released: BigNumber
+}
+
+input EditEpisodeInput {
+  id: String!
+  mediaId: String!
+  mediaType: MediaTypes!
+  type: String!
+  episode: Float!
+  endEpisode: Float
+  title: String
+  url: String!
+  resource: Int!
+  thumbnail: String
+  released: BigNumber
+}
+
+input AddMediaInput {
+  mediaType: MediaTypes!
+  title: TitleInput!
+  description: DescriptionInput
+  instructions: InstructionsInput
+  disableComments: Boolean
+  contentType: String
+  download: String
+  donation: String
+  studio: String
+  status: String!
+  poster: String!
+  wallpaper: String!
+  country: String
+  slug: String
+  year: Int!
+  duraction: EpisodeInput
+  trailer: String
+  translators: [String]
+  cleanners: [String]
+  typpers: [String]
+  audioEngineers: [String]
+  isBelarusianAuthor: Boolean
+  dubbers: [String]
+  editors: [String]
+  programmers: [String]
+  genres: [String]
+  hidden: Boolean
+  dmca: Boolean
+}
+
+input EditMediaInput {
+  mediaType: MediaTypes!
+  mediaId: String!
+  title: TitleInput
+  contentType: String
+  slug: String
+  download: String
+  donation: String
+  description: DescriptionInput
+  instructions: InstructionsInput
+  disableComments: Boolean
+  studio: String
+  franchise: String
+  status: String
+  poster: String
+  wallpaper: String
+  country: String
+  year: Int
+  duraction: EpisodeInput
+  trailer: String
+  translators: [String]
+  audioEngineers: [String]
+  cleanners: [String]
+  isBelarusianAuthor: Boolean
+  typpers: [String]
+  dubbers: [String]
+  editors: [String]
+  programmers: [String]
+  genres: [String]
+  hidden: Boolean
+  dmca: Boolean
+}
+
+input AddChapterInput {
+  mediaId: String!
+  chapter: Float!
+  endChapter: Float
+  title: String
+  images: [ImagesInput!]!
+  released: BigNumber!
+}
+
+input EditChapterInput {
+  id: String!
+  chapter: Float!
+  endChapter: Float
+  title: String
+  images: [ImagesInput!]!
+  released: BigNumber!
+}
+
+enum HistoryType {
+  chapter
+  episode
+}
+
+input HistoryRecordInput {
+  type: HistoryType!
+  entityId: String!
+}
+
+type VolumeChapter {
+  poster: String
+  content: String
+}
+
+input InputVolumeChapter {
+  poster: String
+  content: String
+}
+
+input AddVolumeInput {
+  mediaId: String!
+  volume: Int!
+  chapters: [InputVolumeChapter]!
+  released: BigNumber!
+}
+
+input EditVolumeInput {
+  id: String!
+  volume: Int!
+  chapters: [InputVolumeChapter]!
+  released: BigNumber!
+}
+
+scalar BigInt
+
+scalar Object
+
+enum RecommendationTypes {
+  anime
+  manga
+  cinema
+  all
+}
+
+enum TrendDates {
+  today
+  yestarday
+  week
+  month
+  year
+}
+
+enum ReportType {
+  media
+  general
+}
+
+union ScheduleEntity = Episode | Chapter
+
+type Schedule {
+  day: BigInt!
+  entities: [ScheduleEntity]
+}
+
+type StatisticsPagination {
+  docs: [StatisticHistory]
+  totalDocs: Int
+}
+
+type ReportEntity {
+  id: ID
+  type: ReportType
+  payload: Object
+  closed: Boolean
+  media: Media
+  added: BigInt
+}
+
+type ReportPagination {
+  docs: [ReportEntity]
+  totalDocs: Int
+}
+
+type StatisticHistory {
+  statistics: Statistics
+  createdAt: BigInt
+}
+
+type Statistics {
+  users: BigInt
+  anime: BigInt
+  manga: BigInt
+  cinema: BigInt
+  images: BigInt
+  episodes: BigInt
+  comments: BigInt
+  chapters: BigInt
+  games: BigInt
+}
+
+type Filters {
+  translators: [String]
+  dubbers: [String]
+  editors: [String]
+  programmers: [String]
+  franchises: [String]
+  audioEngineers: [String]
+  typpers: [String]
+  cleanners: [String]
+  genres: [String]
+  studies: [String]
+  years: [Int]
+  types: [String]
+}
+
+type Slide {
+  id: ID
+  title: Title
+  content: Description
+  link: String
+  img: String
+  date: DateType
+}
+
+type DateType {
+  created: BigInt
+  updated: BigInt
+}
+
+input DateTypeInput {
+  created: BigInt
+  updated: BigInt
+}
+
+enum UpdateType {
+  CINEMA
+  SUB
+  DUB
+  MANGA
+  GAMES
+  ALL
+}
+
+type UpdateEntity {
+  released: BigInt
+  updateType: UpdateType
+}
+
+type Update {
+  mediaId: ID
+  mediaType: String
+  contentType: String
+  slug: String!
+  title: Title
+  description: Description
+  instructions: Instructions
+  disableComments: Boolean
+  studio: String
+  status: String!
+  poster: String!
+  wallpaper: String
+  country: String
+  year: Int!
+  duraction: Duraction
+  episodes: [Episode]
+  chapters: [Chapter]
+  view: Int
+  trailer: String
+  date: MediaDate
+  donation: String
+  download: String
+  language: [MediaLanguage!]!
+  recommendations: [Media]
+  relations: [Media]
+  franchise: String
+  translators: [String]
+  audioEngineers: [String]
+  dubbers: [String]
+  editors: [String]
+  programmers: [String]
+  genres: [String]
+  cleanners: [String]
+  typpers: [String]
+  isBelarusianAuthor: Boolean
+  hidden: Boolean
+  rating: Float
+  iRated: Float
+  ratingStats: RatingStats
+  markStats: MarkStats
+  dmca: Boolean
+  mark: Mark
+  favorite: Boolean
+  released: BigInt
+  updateType: UpdateType
+  num: BigInt
+  resource: BigInt
+  featured: Featured
+  volumes: [Volume]
+}
+
+type UpdateDto {
+  docs: [Update]!
+  totalDocs: Int
+}
+
+enum SlideRemoved {
+  SUCCESS
+  ERROR
+}
+
+enum RatingStatus {
+  OK
+  ERROR
+}
+
+input SliderInput {
+  title: TitleInput
+  content: DescriptionInput
+  link: String
+  img: String
+}
+
+input EditSliderInput {
+  id: ID
+  title: TitleInput
+  content: DescriptionInput
+  link: String
+  img: String
+}
+
+enum Report {
+  OK
+  ERROR
+}
+
+enum ReportErrors {
+  videoNotAvailable
+  wrongSorting
+  translation
+  timing
+  dub
+}
+
+enum ReportVideoType {
+  sub
+  dub
+}
+
+type commentsPagination {
+  docs: [Comment!]!
+  totalDocs: Int!
+  limit: Int!
+  offset: Int!
+}
+
+type CommentDate {
+  created: BigNumber!
+  updated: BigNumber
+}
+
+type CommentRelated {
+  mediaType: MediaTypes!
+  mediaId: String!
+}
+
+type CommentUser {
+  avatar: String
+  username: String
+  displayName: String
+}
+
+type Comment {
+  id: ID!
+  userId: String
+  user: CommentUser
+  content: String!
+  related: CommentRelated!
+  date: CommentDate!
+  replies: [Comment]
+  media: Media
+}
+
+enum CommentRemoved {
+  SUCCESS
+  ERROR
+}
+
+input AddCommentInput {
+  mediaType: MediaTypes!
+  mediaId: String!
+  content: String!
+  replyTo: String
+}
+
+input EditCommentInput {
+  commentId: String!
+  content: String!
+}
+
+

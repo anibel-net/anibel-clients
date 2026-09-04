@@ -1,0 +1,20 @@
+[package]
+name = "anibel-core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "anibel_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anibel-api = { path = "../crates/anibel-api" }
+anibel-domain = { path = "../crates/anibel-domain" }
+anibel-player = { path = "../crates/anibel-player" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

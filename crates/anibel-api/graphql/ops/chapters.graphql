@@ -1,0 +1,15 @@
+query ChaptersQuery($mediaId: String!, $offset: Int, $limit: Int) {
+  chapters(mediaId: $mediaId, offset: $offset, limit: $limit) {
+    docs {
+      id
+      chapter
+      endChapter
+      title
+      released
+      read
+    }
+    totalDocs
+    limit
+    offset
+  }
+}

@@ -1,0 +1,3 @@
+mutation MarkAsMutation($input: MarkAsInput!) {
+  markAs(input: $input)
+}

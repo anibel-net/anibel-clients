@@ -1,0 +1,58 @@
+name: core
+
+on:
+  push:
+    branches: [main]
+    paths: ["core/**", "crates/**", "Cargo.toml", "rust-toolchain.toml", ".github/workflows/core.yml"]
+  pull_request:
+    paths: ["core/**", "crates/**", "Cargo.toml", "rust-toolchain.toml", ".github/workflows/core.yml"]
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test -p anibel-core
+
+      # Live schema-drift smoke — runs against production, non-blocking failure
+      - name: Live smoke (best-effort)
+        run: cargo test -p anibel-core --test live -- --ignored
+        continue-on-error: true
+
+  check-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test -p anibel-core

@@ -1,0 +1,26 @@
+# Same as MediaListQuery without URL fields. Used when the server 500s on
+# an invalid poster/wallpaper for a single document.
+query MediaListSafeQuery($mediaType: MediaTypes!, $offset: Int!, $limit: Int!, $filters: MediaFilters) {
+  getMediaList(mediaType: $mediaType, offset: $offset, limit: $limit, filters: $filters) {
+    docs {
+      mediaId
+      mediaType
+      slug
+      title {
+        ru
+        be
+        en
+        alt
+      }
+      year
+      status
+      language
+      genres
+      rating
+      hidden
+    }
+    totalDocs
+    limit
+    offset
+  }
+}

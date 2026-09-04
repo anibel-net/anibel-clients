@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Anibel.App.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:playback="using:Anibel.App.Playback"
+    xmlns:reading="using:Anibel.App.Reading"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="Escape" Invoked="OnEscapeAccelerator" />
+    </Page.KeyboardAccelerators>
+
+    <Grid>
+        <NavigationView
+            x:Name="Nav"
+            IsBackButtonVisible="Visible"
+            IsBackEnabled="False"
+            IsSettingsVisible="False"
+            PaneDisplayMode="Auto"
+            OpenPaneLength="220"
+            CompactPaneLength="48"
+            IsPaneToggleButtonVisible="True"
+            ItemInvoked="OnNavItemInvoked"
+            BackRequested="OnBackRequested">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Главная" Tag="home">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Home" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Пошук" Tag="search">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Find" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItemHeader Content="Каталог" />
+                <NavigationViewItem Content="Анімэ" Tag="anime">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7F4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Манга" Tag="manga">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE89A;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Кіно" Tag="cinema">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8B2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Гульні" Tag="games">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7FC;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Кнігі" Tag="books">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE82D;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Профіль" Tag="profile">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Contact" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Спампаванае" Tag="downloads">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE896;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem Content="Налады" Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Setting" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <Frame x:Name="ContentFrame" Navigated="OnContentNavigated" />
+        </NavigationView>
+        <Grid x:Name="PlayerLayer" Background="{x:Null}" IsHitTestVisible="False" Visibility="Collapsed">
+            <playback:PlayerHost
+                x:Name="ShellPlayer"
+                Visibility="Collapsed"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                CollapseRequested="OnPlayerCollapse"
+                ExpandRequested="OnPlayerExpand"
+                FullscreenRequested="OnPlayerFullscreen"
+                Closed="OnPlayerClosed" />
+            <reading:ReaderHost
+                x:Name="ShellReader"
+                Visibility="Collapsed"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                CollapseRequested="OnReaderCollapse"
+                ExpandRequested="OnReaderExpand"
+                FullscreenRequested="OnReaderFullscreen"
+                Closed="OnReaderClosed" />
+        </Grid>
+    </Grid>
+</Page>

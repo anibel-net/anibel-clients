@@ -1,0 +1,23 @@
+query UpdatesQuery($type: UpdateType, $offset: Int!, $limit: Int!) {
+  getUpdatesList(type: $type, offset: $offset, limit: $limit) {
+    docs {
+      mediaId
+      mediaType
+      slug
+      title {
+        ru
+        be
+        en
+        alt
+      }
+      poster
+      year
+      rating
+      genres
+      language
+      updateType
+      num
+    }
+    totalDocs
+  }
+}

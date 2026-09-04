@@ -1,0 +1,63 @@
+name: windows
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/windows/**", "core/**", "crates/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["apps/windows/**", "core/**", "crates/**", ".github/workflows/windows.yml"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/windows/src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build core (release)
+        run: cargo build --release -p anibel-core
+        working-directory: .
+
+      - name: Build app (x64)
+        run: dotnet build Anibel.App.csproj -c Release -p:Platform=x64
+
+      - name: ViewModel tests
+        run: dotnet test tests/Anibel.App.Tests.csproj -c Release -p:Platform=x64
+        working-directory: apps/windows
+
+      # UI smoke — Debug build of the app + UiSmoke driver, best-effort (non-blocking)
+      - name: Build app (Debug, x64) for UI smoke
+        run: dotnet build Anibel.App.csproj -c Debug -p:Platform=x64
+        continue-on-error: true
+
+      - name: Build UiSmoke (Debug)
+        run: dotnet build tools/UiSmoke/UiSmoke.csproj -c Debug
+        working-directory: .
+        continue-on-error: true
+
+      - name: UI smoke (best-effort)
+        run: .\tools\UiSmoke\bin\Debug\net10.0-windows10.0.19041.0\UiSmoke.exe
+        working-directory: .
+        env:
+          ANIBEL_APP_EXE: apps/windows/src/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Anibel.App.exe
+        continue-on-error: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anibel-windows-x64
+          path: |
+            apps/windows/src/bin/x64/Release/net10.0-windows*/**
+          if-no-files-found: error

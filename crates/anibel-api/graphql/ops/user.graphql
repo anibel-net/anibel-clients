@@ -1,0 +1,16 @@
+query UserQuery($username: String!) {
+  user(username: $username) {
+    id
+    username
+    email
+    role
+    avatar
+    bio
+    displayName
+    wallpaper
+    social {
+      vk
+      tg
+    }
+  }
+}

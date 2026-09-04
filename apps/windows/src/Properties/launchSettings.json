@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Anibel.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Anibel.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

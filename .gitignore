@@ -1,0 +1,32 @@
+# Rust
+/target
+**/target/
+Cargo.lock.orig
+
+# .NET / WinUI / VS
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+AppPackages/
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.cer
+
+# Loaders
+loader-assets/
+
+# mpv runtime binary (fetched via scripts/fetch-mpv.ps1)
+apps/windows/src/Assets/libmpv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local cache
+artifacts/

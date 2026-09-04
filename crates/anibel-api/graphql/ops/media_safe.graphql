@@ -1,0 +1,94 @@
+fragment EpisodeFields on Episode {
+  id
+  episode
+  endEpisode
+  title
+  url
+  resource
+  type
+  released
+  watched
+}
+
+fragment MediaLinkFields on Media {
+  mediaId
+  mediaType
+  slug
+  title {
+    ru
+    be
+    en
+    alt
+  }
+  year
+  status
+  language
+  hidden
+}
+
+fragment MediaFields on Media {
+  mediaId
+  mediaType
+  slug
+  title {
+    ru
+    be
+    en
+    alt
+  }
+  description {
+    ru
+    be
+    en
+  }
+  studio
+  status
+  country
+  year
+  view
+  donation
+  instructions {
+    ru
+    be
+    en
+  }
+  language
+  genres
+  franchise
+  relations {
+    ...MediaLinkFields
+  }
+  recommendations {
+    ...MediaLinkFields
+  }
+  disableComments
+  isBelarusianAuthor
+  hidden
+  dmca
+  rating
+  markStats {
+    total
+    watching
+    watched
+    dropped
+    planned
+  }
+  mark {
+    status
+  }
+  favorite
+  episodes {
+    ...EpisodeFields
+  }
+  chapters {
+    id
+    chapter
+    title
+  }
+}
+
+query MediaSafeQuery($slug: String!, $mediaType: MediaTypes) {
+  media(slug: $slug, mediaType: $mediaType) {
+    ...MediaFields
+  }
+}

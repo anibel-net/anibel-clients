@@ -1,0 +1,8 @@
+query StatusQuery($username: String!, $mediaType: MediaTypes!) {
+  status(username: $username, mediaType: $mediaType) {
+    watching
+    watched
+    dropped
+    planned
+  }
+}

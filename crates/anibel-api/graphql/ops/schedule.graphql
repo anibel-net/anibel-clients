@@ -1,0 +1,19 @@
+query ScheduleQuery {
+  getSchedule {
+    day
+    entities {
+      __typename
+      ... on Episode {
+        id
+        episode
+        title
+        mediaId
+      }
+      ... on Chapter {
+        id
+        chapter
+        title
+      }
+    }
+  }
+}

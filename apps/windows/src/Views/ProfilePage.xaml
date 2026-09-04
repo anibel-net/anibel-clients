@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Anibel.App.Views.ProfilePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Anibel.App.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Grid>
+        <Grid x:Name="LoginHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Border MaxWidth="480" MinWidth="0" Padding="24,20"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="8" HorizontalAlignment="Center">
+                        <Image Source="ms-appx:///Assets/Logo.png" Width="64" Height="64"
+                               HorizontalAlignment="Center" />
+                        <TextBlock Text="Увайсці ў Anibel.Net"
+                                   Style="{StaticResource SubtitleTextBlockStyle}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="Закладкі і спісы даступныя пасля ўваходу"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   HorizontalAlignment="Center" TextWrapping="Wrap"
+                                   TextAlignment="Center" />
+                    </StackPanel>
+                    <TextBox x:Name="UsernameBox" Header="Лагін"
+                             PlaceholderText="username"
+                             KeyDown="OnLoginKeyDown" />
+                    <PasswordBox x:Name="PasswordBox" Header="Пароль"
+                                 PasswordRevealMode="Peek"
+                                 KeyDown="OnLoginKeyDown" />
+                    <Button x:Name="LoginButton" Content="Увайсці"
+                            Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Stretch" Height="40"
+                            Click="OnLoginClick" />
+                    <ProgressBar x:Name="LoginProgress" IsIndeterminate="True"
+                                 Visibility="Collapsed" />
+                    <local:EmptyState x:Name="LoginErrorState"
+                                      Title="Прабачце!"
+                                      Glyph="&#xE7BA;"
+                                      SecondaryText="Капіяваць"
+                                      SecondaryClick="OnCopyLoginErrorClick"
+                                      Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="AccountHost" Visibility="Collapsed" RowSpacing="12" Padding="20,12,20,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Padding="16" CornerRadius="8"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <PersonPicture x:Name="Avatar" Width="72" Height="72" DisplayName="Профіль" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock x:Name="HelloText" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="Anibel.Net"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="Выйсці" Click="OnLogoutClick"
+                            VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <SelectorBar x:Name="ProfileBar" Grid.Row="1" SelectionChanged="OnProfileBarChanged">
+                <SelectorBarItem Text="Агляд" Tag="hub" IsSelected="True" />
+                <SelectorBarItem Text="Закладкі" Tag="favorites" />
+                <SelectorBarItem Text="Гляджу" Tag="inprogress" />
+                <SelectorBarItem Text="Прагледжана" Tag="done" />
+                <SelectorBarItem Text="Запланавана" Tag="planned" />
+                <SelectorBarItem Text="Кінуў" Tag="dropped" />
+            </SelectorBar>
+
+            <Grid Grid.Row="2">
+                <ScrollViewer x:Name="HubPanel">
+                    <local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8" Margin="0,4,0,16">
+                        <Button Tag="favorites" Click="OnHubCardClick"
+                                Style="{StaticResource DefaultButtonStyle}"
+                                MinWidth="200" MinHeight="104" Padding="16,14"
+                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
+                            <StackPanel Spacing="8">
+                                <FontIcon Glyph="&#xE734;" FontSize="16" HorizontalAlignment="Left"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Text="Закладкі" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="FavCountText"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Tag="inprogress" Click="OnHubCardClick"
+                                Style="{StaticResource DefaultButtonStyle}"
+                                MinWidth="200" MinHeight="104" Padding="16,14"
+                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
+                            <StackPanel Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="16" HorizontalAlignment="Left"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Text="Гляджу / чытаю" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="WatchCountText"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Tag="done" Click="OnHubCardClick"
+                                Style="{StaticResource DefaultButtonStyle}"
+                                MinWidth="200" MinHeight="104" Padding="16,14"
+                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
+                            <StackPanel Spacing="8">
+                                <FontIcon Glyph="&#xE73E;" FontSize="16" HorizontalAlignment="Left"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Text="Прагледжана" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="DoneCountText"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Tag="planned" Click="OnHubCardClick"
+                                Style="{StaticResource DefaultButtonStyle}"
+                                MinWidth="200" MinHeight="104" Padding="16,14"
+                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
+                            <StackPanel Spacing="8">
+                                <FontIcon Glyph="&#xE823;" FontSize="16" HorizontalAlignment="Left"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Text="Запланавана" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="PlanCountText"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Tag="dropped" Click="OnHubCardClick"
+                                Style="{StaticResource DefaultButtonStyle}"
+                                MinWidth="200" MinHeight="104" Padding="16,14"
+                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
+                            <StackPanel Spacing="8">
+                                <FontIcon Glyph="&#xE711;" FontSize="16" HorizontalAlignment="Left"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Text="Кінуў" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="DropCountText"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Button>
+                    </local:WrapPanel>
+                </ScrollViewer>
+                <Frame x:Name="ProfileFrame" Visibility="Collapsed" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

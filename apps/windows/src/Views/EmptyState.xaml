@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Anibel.App.Views.EmptyState"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalAlignment="Stretch"
+    VerticalAlignment="Stretch">
+    <Grid Background="Transparent">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="8" MaxWidth="480" Padding="24,40">
+            <FontIcon x:Name="GlyphIcon" Glyph="&#xE7BA;" FontSize="64"
+                      HorizontalAlignment="Center" Margin="0,0,0,12"
+                      Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+            <TextBlock x:Name="TitleBlock" Text="Тут пакуль пуста"
+                       Style="{StaticResource SubtitleTextBlockStyle}"
+                       HorizontalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap" />
+            <TextBlock x:Name="MessageBlock"
+                       HorizontalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Style="{StaticResource BodyTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Margin="0,4,0,16" />
+            <StackPanel x:Name="Actions" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Center">
+                <Button x:Name="ActionButton" Style="{StaticResource AccentButtonStyle}"
+                        MinWidth="120" MinHeight="32" Click="OnActionClick" />
+                <Button x:Name="SecondaryButton" MinWidth="120" MinHeight="32"
+                        Click="OnSecondaryClick" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

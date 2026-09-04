@@ -1,0 +1,24 @@
+query CommentsQuery($mediaType: MediaTypes!, $mediaId: String!, $limit: Int!, $offset: Int!) {
+  comments(mediaType: $mediaType, mediaId: $mediaId, limit: $limit, offset: $offset) {
+    docs {
+      id
+      content
+      user {
+        username
+        avatar
+        displayName
+      }
+      date {
+        created
+        updated
+      }
+      related {
+        mediaType
+        mediaId
+      }
+    }
+    totalDocs
+    limit
+    offset
+  }
+}

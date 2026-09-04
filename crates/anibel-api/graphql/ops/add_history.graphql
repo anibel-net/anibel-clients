@@ -1,0 +1,3 @@
+mutation AddHistoryMutation($input: HistoryRecordInput!) {
+  addHistoryRecord(input: $input)
+}

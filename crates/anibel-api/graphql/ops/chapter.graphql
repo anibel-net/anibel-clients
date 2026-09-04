@@ -1,0 +1,30 @@
+query ChapterQuery($slug: String!, $chapter: Float!) {
+  chapter(slug: $slug, chapter: $chapter) {
+    id
+    chapter
+    endChapter
+    title
+    images {
+      large
+      thumbnail
+    }
+    view
+    read
+    media {
+      mediaId
+      mediaType
+      slug
+      title {
+        ru
+        be
+        en
+      }
+      poster
+      favorite
+      duraction {
+        start
+        end
+      }
+    }
+  }
+}

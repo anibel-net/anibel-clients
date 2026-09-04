@@ -1,0 +1,3 @@
+mutation RemoveHistoryMutation($input: HistoryRecordInput!) {
+  removeHistoryRecord(input: $input)
+}
