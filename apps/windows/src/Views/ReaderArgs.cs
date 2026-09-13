@@ -6,5 +6,4 @@ public sealed record ReaderArgs(
     string MediaTitle,
     string? ChapterTitle,
     string? ChapterId,
-    double[] Chapters,
-    IReadOnlyList<string>? LocalImages = null);
+    double[] Chapters);

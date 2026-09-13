@@ -81,27 +81,25 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
+            <NavigationView.PaneFooter>
+                <StackPanel>
+                    <Button Width="32" Height="32" Padding="0" Margin="8"
+                            HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
+                            AutomationProperties.Name="Спалучэнні клавіш"
+                            ToolTipService.ToolTip="Спалучэнні клавіш (F1)"
+                            Click="OnShortcutHelpClick">
+                        <TextBlock Text="?" FontSize="18" FontWeight="SemiBold" />
+                    </Button>
+                <DropDownButton x:Name="OpenTitlesButton" Content="Адкрытыя тайтлы"
+                                AutomationProperties.AutomationId="OpenTitles" Visibility="Collapsed" Margin="8">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="OpenTitlesMenu" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                </StackPanel>
+            </NavigationView.PaneFooter>
             <Frame x:Name="ContentFrame" Navigated="OnContentNavigated" />
         </NavigationView>
-        <Grid x:Name="PlayerLayer" Background="{x:Null}" IsHitTestVisible="False" Visibility="Collapsed">
-            <playback:PlayerHost
-                x:Name="ShellPlayer"
-                Visibility="Collapsed"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                CollapseRequested="OnPlayerCollapse"
-                ExpandRequested="OnPlayerExpand"
-                FullscreenRequested="OnPlayerFullscreen"
-                Closed="OnPlayerClosed" />
-            <reading:ReaderHost
-                x:Name="ShellReader"
-                Visibility="Collapsed"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                CollapseRequested="OnReaderCollapse"
-                ExpandRequested="OnReaderExpand"
-                FullscreenRequested="OnReaderFullscreen"
-                Closed="OnReaderClosed" />
-        </Grid>
+        <Grid x:Name="PlayerLayer" Background="{x:Null}" IsHitTestVisible="False" Visibility="Collapsed" />
     </Grid>
 </Page>

@@ -6,9 +6,6 @@ namespace Anibel.App.Services;
 /// <summary>Raised after the session token/profile was saved or cleared.</summary>
 public sealed record SessionChangedMessage { }
 
-/// <summary>Raised after the core reports auth expiry and the session was cleared.</summary>
-public sealed record SessionExpiredMessage { }
-
 /// <summary>Request to open the full search page with the given query.</summary>
 public sealed record GlobalSearchMessage(string Query);
 
@@ -26,3 +23,5 @@ public sealed record ReadChapterMessage(Views.ReaderArgs Args);
 
 /// <summary>Request to go back (shell back button behavior).</summary>
 public sealed record GoBackMessage { }
+
+public sealed record OpenProfileMessage(string Username);

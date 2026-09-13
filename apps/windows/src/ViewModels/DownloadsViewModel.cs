@@ -44,23 +44,23 @@ public partial class DownloadsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public void Cancel(DownloadItem? item)
+    public async Task Cancel(DownloadItem? item)
     {
-        if (item is not null) _downloads.Cancel(item);
+        if (item is not null) await _downloads.Cancel(item);
         Refresh();
     }
 
     [RelayCommand]
-    public void Retry(DownloadItem? item)
+    public async Task Retry(DownloadItem? item)
     {
-        if (item is not null) _downloads.Retry(item);
+        if (item is not null) await _downloads.Retry(item);
         Refresh();
     }
 
     [RelayCommand]
-    public void Delete(DownloadItem? item)
+    public async Task Delete(DownloadItem? item)
     {
-        if (item is not null) _downloads.Delete(item);
+        if (item is not null) await _downloads.Delete(item);
         Refresh();
     }
 

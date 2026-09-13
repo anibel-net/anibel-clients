@@ -34,7 +34,11 @@
             <Setter Property="Foreground" Value="White" />
         </Style>
 
-        <Style x:Key="CardChrome" TargetType="Border">
+        <Style x:Key="CardChrome" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -42,11 +46,12 @@
         </Style>
 
         <DataTemplate x:Key="GridCard" x:DataType="core:MediaCard">
-            <Border Style="{StaticResource CardChrome}"
+            <Button Style="{StaticResource CardChrome}"
+                    AutomationProperties.Name="{x:Bind Converter={StaticResource CardTitle}}"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     Tag="{x:Bind}"
-                    Tapped="OnGridCardTapped">
+                    Click="OnGridCardClick" KeyDown="OnGridCardKeyDown">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
@@ -96,7 +101,7 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Grid>
-            </Border>
+            </Button>
         </DataTemplate>
 
         <DataTemplate x:Key="RowCard" x:DataType="core:MediaCard">
@@ -210,7 +215,7 @@
             </ItemsRepeater.Layout>
             <ItemsRepeater.ItemTemplate>
                 <DataTemplate>
-                    <Border Style="{StaticResource CardChrome}"
+                    <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                         <Grid>
                             <Grid.RowDefinitions>

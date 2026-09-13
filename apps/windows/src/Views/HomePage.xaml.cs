@@ -6,7 +6,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 
 namespace Anibel.App.Views;
 
@@ -39,7 +38,6 @@ public sealed partial class HomePage : Page
     {
         await Vm.LoadAsync();
         SyncHeroPips();
-        HideBuiltInFlipButtons(HeroCarousel);
         if (HeroCarousel.Items.Count > 0)
         {
             _heroTimer.Start();
@@ -74,27 +72,6 @@ public sealed partial class HomePage : Page
         }
     }
 
-    private void OnHeroCarouselLoaded(object sender, RoutedEventArgs e)
-        => HideBuiltInFlipButtons(HeroCarousel);
-
-    private static void HideBuiltInFlipButtons(DependencyObject root)
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is Button { Name: "PreviousButtonHorizontal" or "NextButtonHorizontal"
-                or "PreviousButtonVertical" or "NextButtonVertical" } button)
-            {
-                button.Visibility = Visibility.Collapsed;
-                button.IsHitTestVisible = false;
-                button.Width = 0;
-                button.Height = 0;
-            }
-            HideBuiltInFlipButtons(child);
-        }
-    }
-
     private void AdvanceHero()
     {
         if (HeroCarousel.Items.Count == 0)
@@ -103,23 +80,6 @@ public sealed partial class HomePage : Page
         }
         var next = HeroCarousel.SelectedIndex + 1;
         HeroCarousel.SelectedIndex = next >= HeroCarousel.Items.Count ? 0 : next;
-    }
-
-    private void OnHeroPrev(object sender, RoutedEventArgs e)
-    {
-        if (HeroCarousel.Items.Count == 0)
-        {
-            return;
-        }
-        var i = HeroCarousel.SelectedIndex;
-        HeroCarousel.SelectedIndex = i <= 0 ? HeroCarousel.Items.Count - 1 : i - 1;
-        RestartHeroTimer();
-    }
-
-    private void OnHeroNext(object sender, RoutedEventArgs e)
-    {
-        AdvanceHero();
-        RestartHeroTimer();
     }
 
     private void RestartHeroTimer()

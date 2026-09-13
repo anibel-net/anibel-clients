@@ -1,0 +1,3 @@
+mutation AddRatingMutation($rating: Float!, $mediaType: MediaTypes!, $mediaId: String!) {
+  addRating(rating: $rating, mediaType: $mediaType, mediaId: $mediaId)
+}

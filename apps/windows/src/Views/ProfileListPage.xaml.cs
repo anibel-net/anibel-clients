@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace Anibel.App.Views;
 
-public sealed partial class ProfileListPage : Page
+public sealed partial class ProfileListPage : Page, IRecipient<SessionChangedMessage>
 {
     private ProfileListArgs? _args;
     public ProfileListViewModel Vm { get; }
@@ -19,7 +19,11 @@ public sealed partial class ProfileListPage : Page
         Vm = App.Services.GetRequiredService<ProfileListViewModel>();
         InitializeComponent();
         ListView.ItemsSource = Vm.Items;
+        Loaded += (_, _) => WeakReferenceMessenger.Default.RegisterAll(this);
+        Unloaded += (_, _) => WeakReferenceMessenger.Default.UnregisterAll(this);
     }
+
+    public async void Receive(SessionChangedMessage message) { if (_args is not null) await Vm.LoadAsync(_args); }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {

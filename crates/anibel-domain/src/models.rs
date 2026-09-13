@@ -143,6 +143,8 @@ pub struct MediaDetail {
     pub year: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rating: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub i_rated: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genres: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -205,6 +207,8 @@ pub struct Comment {
     /// Epoch milliseconds. Flattened from GraphQL `date.created` (BigNumber).
     #[serde(default)]
     pub created: i64,
+    #[serde(default)]
+    pub replies: Vec<Comment>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -1,6 +1,13 @@
 # Anibel Clients — Architecture
 
-Version: 1.0 · Status: draft/plan
+Version: 1.0 · Status: historical plan and backend notes
+
+> Historical backend research and original design notes. The current implemented
+> ownership and protocol are defined in [SHARED-CORE-SPEC.md](SHARED-CORE-SPEC.md).
+> Rust now owns shared cache, session, downloads, playback/resume/history, reader,
+> page cursors, content choices and personal-list rules. Windows supplies UI and OS adapters.
+> Any future-tense milestones or old ownership descriptions below are historical.
+
 
 Native clients for [anibel.net](https://anibel.net) — Belarusian anime/manga/cinema/games platform.
 

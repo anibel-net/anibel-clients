@@ -136,6 +136,11 @@
                 <TextBlock x:Name="GenresText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap" />
                 <TextBlock x:Name="RatingText" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <RatingControl x:Name="AverageStars" MaxRating="5" IsReadOnly="True" AutomationProperties.Name="Рэйтынг" />
+                <StackPanel x:Name="MyRatingPanel" Spacing="2">
+                    <TextBlock x:Name="MyRatingText" Text="Мая ацэнка" Style="{StaticResource CaptionTextBlockStyle}" />
+                    <local:StarRating x:Name="MyRatingStars" RatingSelected="OnRatingSelected" />
+                </StackPanel>
                 <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" MaxLines="5"
                            TextTrimming="CharacterEllipsis" Opacity="0.92" />
 
@@ -411,7 +416,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="ReplyChipText" VerticalAlignment="Center"
-                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                       TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
                             <HyperlinkButton Grid.Column="1" Content="Скасаваць" Click="OnCancelReplyClick"
                                              Padding="0" MinHeight="0" VerticalAlignment="Center" />
                         </Grid>
@@ -424,7 +429,7 @@
                         <TextBox x:Name="CommentBox" PlaceholderText="Напісаць каментар…"
                                  AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40"
                                  MaxLength="2000" />
-                        <Button Grid.Column="1" Content="Даслаць" Style="{StaticResource AccentButtonStyle}"
+                        <Button x:Name="SendCommentButton" Grid.Column="1" Content="Даслаць" Style="{StaticResource AccentButtonStyle}"
                                 VerticalAlignment="Bottom" MinWidth="96" Height="32" Click="OnSendCommentClick" />
                     </Grid>
                     <TextBlock x:Name="CommentLoginHint" Text="Увайдзіце, каб пакінуць каментар"
@@ -447,37 +452,7 @@
                         </ListView.Resources>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="core:CommentDto">
-                                <Grid HorizontalAlignment="Stretch" ColumnSpacing="12" Padding="0,4,8,8">
-                                    <Grid.ContextFlyout>
-                                        <MenuFlyout>
-                                            <MenuFlyoutItem Text="Капіяваць" Click="OnCopyCommentClick" />
-                                            <MenuFlyoutItem Text="Адказаць" Click="OnReplyCommentClick" />
-                                        </MenuFlyout>
-                                    </Grid.ContextFlyout>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <PersonPicture Width="36" Height="36" VerticalAlignment="Top"
-                                                   HorizontalAlignment="Left"
-                                                   DisplayName="{x:Bind Converter={StaticResource CommentUser}}"
-                                                   ProfilePicture="{Binding User.Avatar, Converter={StaticResource Img}}" />
-                                    <StackPanel Grid.Column="1" Spacing="2" HorizontalAlignment="Stretch">
-                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" TextAlignment="Left"
-                                                   IsTextSelectionEnabled="True">
-                                            <Run Text="{x:Bind Converter={StaticResource CommentUser}}" FontWeight="SemiBold" />
-                                            <Run Text="  " /><Run Text="{x:Bind Converter={StaticResource CommentDate}}" />
-                                        </TextBlock>
-                                        <TextBlock Text="{x:Bind Content}" TextWrapping="Wrap" TextAlignment="Left"
-                                                   IsTextSelectionEnabled="True" />
-                                        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,2,0,0">
-                                            <HyperlinkButton Content="Капіяваць" Click="OnCopyCommentClick"
-                                                             Padding="0" MinHeight="0" FontSize="12" />
-                                            <HyperlinkButton Content="Адказаць" Click="OnReplyCommentClick"
-                                                             Padding="0" MinHeight="0" FontSize="12" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Grid>
+                                <local:CommentThreadView Comment="{x:Bind}" ReplyRequested="OnThreadReply" />
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>

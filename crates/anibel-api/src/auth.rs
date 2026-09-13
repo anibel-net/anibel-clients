@@ -29,9 +29,10 @@ impl AnibelApi {
         let user = data
             .login
             .ok_or_else(|| AnibelError::Graphql("login returned null".into()))?;
-        if !user.token.is_empty() {
-            self.set_token(Some(user.token.clone())).await;
+        if user.token.trim().is_empty() {
+            return Err(AnibelError::Graphql("login returned an empty token".into()));
         }
+        self.set_token(Some(user.token.clone())).await;
         Ok(crate::map::login_user(user))
     }
 

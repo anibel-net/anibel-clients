@@ -184,6 +184,25 @@ impl AnibelApi {
         )?))
     }
 
+    pub async fn set_rating(&self, media_id: &str, media_type: &str, rating: f64) -> Result<()> {
+        let data = self
+            .request_no_retry::<Value>(gql_payload!(
+                AddRatingMutation,
+                "AddRatingMutation",
+                gql::add_rating_mutation::Variables {
+                    rating,
+                    media_id: media_id.to_owned(),
+                    media_type: to_enum::<gql::add_rating_mutation::MediaTypes>(media_type)?,
+                }
+            ))
+            .await?
+            .deserialize::<gql::add_rating_mutation::ResponseData>()?;
+        if !matches!(data.add_rating, gql::add_rating_mutation::RatingStatus::OK) {
+            return Err(AnibelError::Graphql("Rating was not saved".into()));
+        }
+        Ok(())
+    }
+
     pub async fn add_comment(
         &self,
         media_id: &str,
@@ -191,23 +210,31 @@ impl AnibelApi {
         content: &str,
         reply_to: Option<&str>,
     ) -> Result<Comment> {
-        // Mutation: never retried (see AnibelApi::request_no_retry).
-        let data = self
-            .request_no_retry::<Value>(gql_payload!(
-                AddCommentMutation,
-                "AddCommentMutation",
-                gql::add_comment_mutation::Variables {
-                    input: gql::add_comment_mutation::AddCommentInput {
-                        media_id: media_id.to_string(),
-                        media_type: to_enum::<gql::add_comment_mutation::MediaTypes>(media_type)?,
-                        content: content.to_string(),
-                        reply_to: reply_to
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                            .map(str::to_string),
-                    },
+        // A null replyTo becomes an existing field in MongoDB and hides a root
+        // comment from the server's `$exists: false` root query. Omit it entirely.
+        let mut body = gql_payload!(
+            AddCommentMutation,
+            "AddCommentMutation",
+            gql::add_comment_mutation::Variables {
+                input: gql::add_comment_mutation::AddCommentInput {
+                    media_id: media_id.to_string(),
+                    media_type: to_enum::<gql::add_comment_mutation::MediaTypes>(media_type)?,
+                    content: content.to_string(),
+                    reply_to: reply_to
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string),
                 },
-            ))
+            },
+        );
+        if reply_to.is_none_or(|id| id.trim().is_empty()) {
+            body["variables"]["input"]
+                .as_object_mut()
+                .unwrap()
+                .remove("replyTo");
+        }
+        let data = self
+            .request_no_retry::<Value>(body)
             .await?
             .deserialize::<gql::add_comment_mutation::ResponseData>()?;
         Ok(crate::map::comment(data.add_comment.ok_or_else(|| {

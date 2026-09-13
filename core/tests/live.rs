@@ -40,6 +40,28 @@ fn live_media_list_anime() {
 
 #[test]
 #[ignore = "live network"]
+fn live_comment_tree_within_server_depth_limit() {
+    let h = init();
+    let titles = call(h, r#"{"id":1,"op":"trends","args":{"limit":3}}"#);
+    assert_eq!(titles["ok"], true, "trends failed: {titles}");
+    let titles = titles["value"].as_array().unwrap();
+    assert!(!titles.is_empty(), "no titles to check");
+    for (index, title) in titles.iter().enumerate() {
+        let request = serde_json::json!({
+            "id": index + 2, "op": "comments", "cache": "reload",
+            "args": {"mediaId":title["mediaId"], "mediaType":title["mediaType"], "limit":20}
+        });
+        let response = call(h, &request.to_string());
+        assert_eq!(response["ok"], true, "comment query rejected: {response}");
+        for comment in response["value"]["docs"].as_array().unwrap() {
+            assert!(comment["replies"].is_array());
+        }
+    }
+    unsafe { anibel_core_shutdown(h) };
+}
+
+#[test]
+#[ignore = "live network"]
 fn live_resolve_episode_native() {
     let h = init();
     // Known Anibel-player episode (videoService record) — id from episode url

@@ -52,7 +52,6 @@ public partial class SearchViewModel : ObservableObject
             return;
         }
         Query = q;
-        _history?.Add(q);
         var generation = ++_generation;
         Items.Clear();
         IsBusy = true;
@@ -61,6 +60,7 @@ public partial class SearchViewModel : ObservableObject
         await Task.Yield();
         try
         {
+            if (_history is not null) await _history.Add(q);
             var results = await _core.SearchAsync(q, 120);
             if (generation != _generation)
             {

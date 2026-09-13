@@ -18,7 +18,7 @@ public static class CardDisplay
         var parts = new List<string>();
         if (!string.IsNullOrEmpty(card.MediaType)) parts.Add(Ui.MediaType(card.MediaType));
         if (card.Year is > 0) parts.Add(card.Year.Value.ToString());
-        if (card.Rating is > 0) parts.Add($"{card.Rating.Value:0.0}");
+        if (card.Rating is > 0) parts.Add($"{RatingDisplay.Stars(card.Rating.Value):0.0}/5 ★");
         return string.Join(" · ", parts);
     }
 

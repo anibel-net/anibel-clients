@@ -6,11 +6,12 @@ namespace Anibel.App.Core;
 public interface ICoreClient
 {
     bool IsConnected { get; }
+    Task<T> CallAsync<T>(string op, object? args = null, CancellationToken ct = default);
 
     Task<CoreVersion> GetVersionAsync();
     Task<List<MediaCard>> SearchAsync(string query, int limit = 10, CancellationToken ct = default);
     Task<List<MediaCard>> TrendsAsync(string type = "all", string date = "week", int limit = 12, CancellationToken ct = default);
-    Task<PaginationDto<MediaCard>> MediaListAsync(string mediaType, int offset = 0, int limit = 20, object? filters = null, CancellationToken ct = default);
+    Task<PaginationDto<MediaCard>> MediaListAsync(string mediaType, long offset = 0, int limit = 20, object? filters = null, CancellationToken ct = default);
     Task<PaginationDto<EpisodeDto>> EpisodesAsync(string mediaId, string type = "sub", int resource = 1, int? limit = null, CancellationToken ct = default);
     Task<List<EpisodeDto>> EpisodesMatrixAsync(string mediaId, CancellationToken ct = default);
     Task<PlaybackIntentDto> ResolveEpisodeAsync(string videoIdOrUrl, CancellationToken ct = default);

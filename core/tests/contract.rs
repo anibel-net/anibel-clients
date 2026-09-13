@@ -88,6 +88,7 @@ fn media_detail_exact_key_set() {
         country: Some("JP".into()),
         status: Some("finished".into()),
         year: Some(2004),
+        i_rated: None,
         rating: Some(8.9),
         genres: Some(vec!["психология".into()]),
         language: Some(vec!["sub".into()]),
@@ -214,6 +215,7 @@ fn comment_exact_key_set() {
             display_name: Some("Алиса".into()),
         }),
         created: 1_700_000_000_000,
+        replies: vec![],
     };
     assert_eq!(
         wire(&comment),
@@ -225,7 +227,8 @@ fn comment_exact_key_set() {
                 "avatar": "https://cdn.anibel.net/u/alice.png",
                 "displayName": "Алиса"
             },
-            "created": 1700000000000u64
+            "created": 1700000000000u64,
+            "replies": []
         })
     );
 }
@@ -293,7 +296,7 @@ fn playback_intent_exact_key_set() {
 
     // native shape (Anibel HLS/DASH + ASS) — the mpv/libass pipeline
     let native = PlaybackIntent {
-        kind: "native".into(),
+        kind: anibel_core::player::PlaybackKind::Native,
         page_url: Some(
             "https://video.anibel.net/8c52d132-955a-445c-8fa7-2f5739e141d8?type=anime".into(),
         ),

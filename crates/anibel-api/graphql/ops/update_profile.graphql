@@ -1,0 +1,3 @@
+mutation UpdateProfileMutation($input: ProfileInput!) {
+  updateUser(input: $input) { id username displayName bio avatar wallpaper }
+}

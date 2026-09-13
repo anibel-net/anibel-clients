@@ -166,6 +166,7 @@ fn media_detail_from(v: &Value) -> MediaDetail {
         status: str_field(v, "status"),
         year: card.year,
         rating: card.rating,
+        i_rated: f64_field(v, "iRated"),
         genres: card.genres,
         language: str_vec_opt(v, "language"),
         mark: v.get("mark").filter(|m| !m.is_null()).map(|m| Mark {
@@ -258,6 +259,16 @@ fn comment_from(v: &Value) -> Comment {
             display_name: str_field(u, "displayName"),
         }),
         created,
+        replies: v
+            .get("replies")
+            .and_then(Value::as_array)
+            .map(|rows| {
+                rows.iter()
+                    .filter(|r| !r.is_null())
+                    .map(comment_from)
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 

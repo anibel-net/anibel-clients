@@ -12,18 +12,16 @@ namespace Anibel.App.Core;
 /// </summary>
 public sealed class CoreClient : ICoreClient, IDisposable
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) } };
     private readonly SettingsService _settings;
-    private readonly ApiCache _cache;
     private readonly object _initLock = new();
     private long _handle = -1;
     private long _nextId;
     private bool _disposed;
 
-    public CoreClient(SettingsService settings, ApiCache cache)
+    public CoreClient(SettingsService settings)
     {
         _settings = settings;
-        _cache = cache;
     }
 
     public bool IsConnected => Interlocked.Read(ref _handle) >= 0;
@@ -48,6 +46,7 @@ public sealed class CoreClient : ICoreClient, IDisposable
             {
                 baseUrl = _settings.ApiBaseUrl,
                 videoBaseUrl = _settings.VideoBaseUrl,
+                dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Anibel", "core"),
             };
             handle = AnibelCoreNative.anibel_core_init(JsonSerializer.Serialize(config, Json));
             if (handle < 0)
@@ -76,72 +75,37 @@ public sealed class CoreClient : ICoreClient, IDisposable
 
     public async Task<JsonElement> CallRawAsync(string op, object? args = null, CancellationToken ct = default)
     {
+        var requestId = Interlocked.Increment(ref _nextId);
         var request = new
         {
-            id = Interlocked.Increment(ref _nextId),
+            id = requestId,
             op,
             args,
+            cache = CoreRequestScope.IsReload ? "reload" : "default",
         };
         var requestJson = JsonSerializer.Serialize(request, Json);
-        var argsJson = JsonSerializer.Serialize(args ?? new { }, Json);
-
-        if (ApiCache.IsCacheable(op) && !ApiCache.IsBypassed
-            && _cache.TryGet(op, argsJson, out var cached, out var stale))
-        {
-            if (stale)
-            {
-                _ = RefreshCacheAsync(op, requestJson, argsJson, CancellationToken.None);
-            }
-            using var cachedDoc = JsonDocument.Parse(cached);
-            return cachedDoc.RootElement.Clone();
-        }
-
-        JsonElement? result = null;
         try
         {
-            result = await CallRawCoreAsync(requestJson, ct).ConfigureAwait(false);
-            var value = result.Value;
-            if (ApiCache.IsCacheable(op))
-            {
-                _cache.Set(op, argsJson, value.GetRawText());
-            }
-            else
-            {
-                _cache.Invalidate(ApiCache.InvalidatedBy(op));
-            }
-            return value;
+            return await CallRawCoreAsync(requestId, requestJson, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             Log($"op={op} args={Shorten(Redact(requestJson))}\n  -> {ex.GetType().Name}: {ex.Message}");
             throw;
         }
-        finally
-        {
-            if (result is null)
-            {
-                Log($"op={op} threw (see above)");
-            }
-        }
     }
 
-    private async Task RefreshCacheAsync(string op, string requestJson, string argsJson, CancellationToken ct)
-    {
-        try
-        {
-            var value = await CallRawCoreAsync(requestJson, ct).ConfigureAwait(false);
-            _cache.Set(op, argsJson, value.GetRawText());
-        }
-        catch (Exception ex)
-        {
-            Diag.Log($"cache revalidate {op}: {ex.Message}");
-        }
-    }
+    public Task ClearCacheAsync(CancellationToken ct = default)
+        => CallAsync<JsonElement>("clearCache", ct: ct);
 
-    private async Task<JsonElement> CallRawCoreAsync(string requestJson, CancellationToken ct)
+    private async Task<JsonElement> CallRawCoreAsync(long requestId, string requestJson, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var handle = EnsureHandle();
 
+        if (AnibelCoreNative.anibel_core_request_begin(handle, requestId) == 0)
+            throw new InvalidOperationException("Core request capacity exceeded.");
+        using var cancellation = ct.Register(() => AnibelCoreNative.anibel_core_cancel(handle, requestId));
         var responseJson = await Task.Run(() =>
         {
             var ptr = AnibelCoreNative.anibel_core_call(handle, requestJson);
@@ -153,7 +117,7 @@ public sealed class CoreClient : ICoreClient, IDisposable
             {
                 AnibelCoreNative.anibel_core_free(ptr);
             }
-        }, ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         using var doc = JsonDocument.Parse(responseJson);
         var root = doc.RootElement;
@@ -168,6 +132,7 @@ public sealed class CoreClient : ICoreClient, IDisposable
                 e.TryGetProperty("message", out var m) ? m.GetString() ?? "core error" : "core error")
             : new CoreErrorDto("unknown", "empty error from core");
 
+        if (error.Code == "cancelled") throw new OperationCanceledException(error.Message, ct);
         throw new CoreException(error.Code, error.Message);
     }
 
@@ -243,7 +208,7 @@ public sealed class CoreClient : ICoreClient, IDisposable
     public Task<List<MediaCard>> TrendsAsync(string type = "all", string date = "week", int limit = 12, CancellationToken ct = default)
         => CallAsync<List<MediaCard>>("trends", new { type, date, limit }, ct);
 
-    public Task<PaginationDto<MediaCard>> MediaListAsync(string mediaType, int offset = 0, int limit = 20, object? filters = null, CancellationToken ct = default)
+    public Task<PaginationDto<MediaCard>> MediaListAsync(string mediaType, long offset = 0, int limit = 20, object? filters = null, CancellationToken ct = default)
         => CallAsync<PaginationDto<MediaCard>>("mediaList", new { mediaType, offset, limit, filters }, ct);
 
     public Task<PaginationDto<EpisodeDto>> EpisodesAsync(string mediaId, string type = "sub", int resource = 1, int? limit = null, CancellationToken ct = default)

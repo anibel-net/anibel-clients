@@ -10,9 +10,18 @@ using Windows.System;
 
 namespace Anibel.App.Views;
 
-public sealed partial class ProfilePage : Page, IRecipient<SessionExpiredMessage>
+public sealed record ProfileArgs(string Username);
+
+public sealed partial class ProfilePage : Page, IRecipient<SessionChangedMessage>
 {
     public ProfileViewModel Vm { get; }
+    private string? _username;
+
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        _username = (e.Parameter as ProfileArgs)?.Username;
+        base.OnNavigatedTo(e);
+    }
 
     public ProfilePage()
     {
@@ -20,9 +29,9 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionExpiredMessage
         InitializeComponent();
         Loaded += async (_, _) =>
         {
-            Vm.RefreshFlags();
+            await Vm.LoadProfileAsync(_username);
             SyncChrome();
-            if (Vm.IsLoggedIn)
+            if (Vm.IsOwn)
             {
                 await Vm.LoadHubAsync();
                 SyncCounts();
@@ -34,6 +43,8 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionExpiredMessage
         Vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ProfileViewModel.IsLoggedIn)
+                or nameof(ProfileViewModel.Profile)
+                or nameof(ProfileViewModel.IsOwn)
                 or nameof(ProfileViewModel.Hello)
                 or nameof(ProfileViewModel.AvatarUrl)
                 or nameof(ProfileViewModel.IsBusy)
@@ -51,31 +62,60 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionExpiredMessage
         };
     }
 
-    public void Receive(SessionExpiredMessage message) => _ = DispatcherQueue.TryEnqueue(() =>
+    public void Receive(SessionChangedMessage message) => _ = DispatcherQueue.TryEnqueue(async () =>
     {
-        Vm.RefreshFlags();
+        await Vm.LoadProfileAsync(_username);
         SyncChrome();
     });
 
     private void SyncChrome()
     {
-        LoginHost.Visibility = Vm.IsLoggedIn ? Visibility.Collapsed : Visibility.Visible;
-        AccountHost.Visibility = Vm.IsLoggedIn ? Visibility.Visible : Visibility.Collapsed;
-        HelloText.Text = Vm.Hello;
-        Avatar.DisplayName = string.IsNullOrEmpty(Vm.Hello) ? Strings.Profile : Vm.Hello;
-        if (Vm.AvatarUrl is { Length: > 0 } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
-        {
-            Avatar.ProfilePicture = new BitmapImage(uri);
-        }
-        else
-        {
-            Avatar.ProfilePicture = null;
-        }
+        LoginHost.Visibility = !Vm.IsLoggedIn && _username is null ? Visibility.Visible : Visibility.Collapsed;
+        AccountHost.Visibility = Vm.Profile is not null ? Visibility.Visible : Visibility.Collapsed;
+        OwnActions.Visibility = ProfileBar.Visibility = PersonalContent.Visibility = Vm.IsOwn ? Visibility.Visible : Visibility.Collapsed;
+        var profile = Vm.Profile;
+        HelloText.Text = string.IsNullOrWhiteSpace(profile?.DisplayName) ? profile?.Username ?? "" : profile.DisplayName;
+        HandleText.Text = profile is null ? "" : "@" + profile.Username;
+        BioText.Text = profile?.Bio ?? "";
+        BioText.Visibility = string.IsNullOrWhiteSpace(profile?.Bio) ? Visibility.Collapsed : Visibility.Visible;
+        Avatar.DisplayName = HelloText.Text;
+        Avatar.ProfilePicture = ImageSource(profile?.Avatar, 160);
+        Wallpaper.Source = ImageSource(profile?.Wallpaper, 1200);
+        Wallpaper.Visibility = Wallpaper.Source is null ? Visibility.Collapsed : Visibility.Visible;
+        ProfileError.Message = Vm.StatusMessage ?? "";
+        ProfileError.IsOpen = !Vm.LoginError && Vm.HasStatus;
+        ProfileLoading.IsActive = Vm.IsBusy && (Vm.IsLoggedIn || _username is not null);
+        ProfileLoading.Visibility = ProfileLoading.IsActive ? Visibility.Visible : Visibility.Collapsed;
         LoginButton.IsEnabled = !Vm.IsBusy;
         LoginProgress.Visibility = Vm.IsBusy ? Visibility.Visible : Visibility.Collapsed;
         LoginErrorState.Message = Vm.StatusMessage ?? "";
         LoginErrorState.Visibility = Vm.LoginError && Vm.HasStatus ? Visibility.Visible : Visibility.Collapsed;
         SyncCounts();
+    }
+
+    private static BitmapImage? ImageSource(string? url, int width) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? new BitmapImage(uri) { DecodePixelWidth = width } : null;
+
+    private async void OnEditProfileClick(object sender, RoutedEventArgs e)
+    {
+        if (!Vm.IsOwn || Vm.Profile is null) return;
+        var editor = new ProfileEditView(Vm.Profile);
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "Рэдагаваць профіль", Content = editor,
+            PrimaryButtonText = "Захаваць", CloseButtonText = "Скасаваць",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        dialog.PrimaryButtonClick += async (_, args) =>
+        {
+            var deferral = args.GetDeferral();
+            dialog.IsPrimaryButtonEnabled = false;
+            editor.IsEnabled = false;
+            try { await Vm.UpdateProfileAsync(editor.Patch); }
+            catch (Exception ex) { editor.ShowError(Ui.DisplayMessage(ex)); args.Cancel = true; }
+            finally { editor.IsEnabled = true; dialog.IsPrimaryButtonEnabled = true; deferral.Complete(); }
+        };
+        await dialog.ShowAsync();
     }
 
     private void SyncCounts()
@@ -112,6 +152,7 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionExpiredMessage
         SyncChrome();
         if (Vm.IsLoggedIn)
         {
+            await Vm.LoadProfileAsync(_username);
             await Vm.LoadHubAsync();
             SyncCounts();
             ShowHub();

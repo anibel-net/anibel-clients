@@ -12,7 +12,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid x:Name="WindowRoot" KeyDown="OnWindowKeyDown">
         <Grid.Resources>
             <views:StringToImageConverter x:Key="Img" />
             <views:BoolToVisibilityConverter x:Key="BoolVis" />
@@ -47,7 +47,6 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     QueryIcon="Find"
-                    CornerRadius="8"
                     MaxSuggestionListHeight="420"
                     PlaceholderText="Пошук анімэ, мангі, кіно, гульняў…"
                     UpdateTextOnSelect="False"
@@ -78,7 +77,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="32" Height="32" CornerRadius="8"
+                                <Border Width="32" Height="48" CornerRadius="3"
                                         Visibility="{Binding HasPoster, Converter={StaticResource BoolVis}}">
                                     <Border.Background>
                                         <ImageBrush ImageSource="{Binding Poster, Converter={StaticResource Img}, ConverterParameter=64}"

@@ -32,6 +32,66 @@ public sealed partial class PlayerHost : UserControl
     public bool IsOpen => _controller is { IsDisposed: false } && Visibility == Visibility.Visible;
     private bool _externalChrome;
     private Views.PlayerArgs? _lastArgs;
+    private Task? _opening;
+    private MenuFlyout? _qualityMenu;
+    public bool IsQualityMenuOpen => _qualityMenu?.IsOpen == true;
+
+    public async Task ShowQualityMenuAsync(FrameworkElement anchor)
+    {
+        var controller = _controller;
+        var engine = controller?.Engine as MpvEngine;
+        _qualityMenu?.Hide();
+        var menu = _qualityMenu = new MenuFlyout();
+        menu.Items.Add(new MenuFlyoutItem { Text = "Загрузка…", IsEnabled = false });
+        menu.ShowAt(anchor);
+        try
+        {
+            if (engine is null)
+            {
+                menu.Items.Clear();
+                menu.Items.Add(new MenuFlyoutItem { Text = "Якасць задаецца ўбудаваным плэерам", IsEnabled = false });
+                return;
+            }
+            var core = App.Services.GetRequiredService<ICoreClient>();
+            var qualities = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks() });
+            if (!ReferenceEquals(controller, _controller) || !ReferenceEquals(engine, controller?.Engine)) { menu.Hide(); return; }
+            menu.Items.Clear();
+            foreach (var quality in qualities.Choices)
+            {
+                var item = new ToggleMenuFlyoutItem { Text = quality.Label, IsChecked = quality.Selected };
+                item.Click += async (_, _) =>
+                {
+                    menu.Hide();
+                    try
+                    {
+                        if (!ReferenceEquals(engine, _controller?.Engine)) return;
+                        var selection = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks(), select = quality.Id });
+                        if (ReferenceEquals(engine, _controller?.Engine) && selection.Video is { } id) engine.SetVideoTrack(id);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (!ReferenceEquals(_qualityMenu, menu) || anchor.XamlRoot is null) return;
+                        menu.Items.Clear();
+                        menu.Items.Add(new MenuFlyoutItem { Text = Ui.DisplayMessage(ex), IsEnabled = false });
+                        menu.ShowAt(anchor);
+                    }
+                };
+                menu.Items.Add(item);
+            }
+            if (qualities.Choices.Length <= 1)
+            {
+                if (qualities.Choices.Length > 0) menu.Items.Add(new MenuFlyoutSeparator());
+                menu.Items.Add(new MenuFlyoutItem { Text = "Іншыя варыянты якасці недаступныя", IsEnabled = false });
+            }
+        }
+        catch (Exception ex)
+        {
+            menu.Items.Clear();
+            menu.Items.Add(new MenuFlyoutItem { Text = Ui.DisplayMessage(ex), IsEnabled = false });
+        }
+    }
+
+    private async void OnQualityClick(object sender, RoutedEventArgs e) => await ShowQualityMenuAsync((FrameworkElement)sender);
 
     public PlayerHost()
     {
@@ -77,7 +137,6 @@ public sealed partial class PlayerHost : UserControl
     public async Task PlayAsync(Views.PlayerArgs args)
     {
         Visibility = Visibility.Visible;
-        SetMini(false);
         _lastArgs = args;
         HideError();
         TitleText.Text = string.IsNullOrEmpty(args.TitleLabel) ? Strings.Episode : args.TitleLabel;
@@ -87,6 +146,8 @@ public sealed partial class PlayerHost : UserControl
         }
         EnsureController();
         SetBusy(true);
+        var controller = _controller!;
+        Task? opening = null;
         try
         {
             var surfaces = new PlayerSurfaces
@@ -94,37 +155,24 @@ public sealed partial class PlayerHost : UserControl
                 VideoPanel = VideoPanel,
                 EmbedHost = ContentRoot,
             };
-            var dub = string.Equals(args.EpisodeType, "dub", StringComparison.OrdinalIgnoreCase);
-            if (args.LocalVideoPath is { Length: > 0 } && File.Exists(args.LocalVideoPath))
-            {
-                SetStatus(Strings.OpeningLocalFile);
-                await _controller!.StartLocalAsync(
-                    args.LocalVideoPath,
-                    args.LocalSubPaths ?? [],
-                    args.LocalFontPaths,
-                    args.EpisodeId,
-                    surfaces,
-                    dub);
-            }
-            else
-            {
-                SetStatus(Strings.ResolvingSource);
-                await _controller!.StartAsync(args.Url, args.EpisodeId, surfaces, dub);
-            }
+            SetStatus(Strings.ResolvingSource);
+            opening = controller.StartAsync(args.Url, args.EpisodeId, surfaces, args.EpisodeType, args.DownloadId);
+            _opening = opening;
+            await opening;
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception ex)
         {
-            if (_controller is { IsDisposed: false })
+            if (!controller.IsDisposed && ReferenceEquals(_opening, opening))
             {
                 SetStatus(ex.Message, error: true);
             }
         }
         finally
         {
-            if (_controller is { IsDisposed: false })
+            if (!controller.IsDisposed && ReferenceEquals(_opening, opening))
             {
                 SetBusy(false);
             }
@@ -133,6 +181,7 @@ public sealed partial class PlayerHost : UserControl
 
     public void SetMini(bool mini, bool externalChrome = false)
     {
+        _qualityMenu?.Hide();
         _mini = mini;
         _externalChrome = externalChrome;
         var state = !mini ? "Theater" : externalChrome ? "Pip" : "Mini";
@@ -177,11 +226,16 @@ public sealed partial class PlayerHost : UserControl
         }
     }
 
+    private Task _pendingClose = Task.CompletedTask;
+    public Task ReportsCompleted => _pendingClose;
+    public async Task CloseAsync() { Close(); await _pendingClose; }
+
     public void Close()
     {
+        _qualityMenu?.Hide();
         _seekDebounce.Stop();
         _hideControls.Stop();
-        _controller?.Dispose();
+        if (_controller is { } controller) { controller.Dispose(); _pendingClose = Task.WhenAll(_pendingClose, controller.ReportsCompleted); }
         _controller = null;
         HideError();
         Visibility = Visibility.Collapsed;
@@ -195,9 +249,7 @@ public sealed partial class PlayerHost : UserControl
             return;
         }
         var core = App.Services.GetRequiredService<ICoreClient>();
-        var session = App.Services.GetRequiredService<SessionService>();
-        var downloads = App.Services.GetService<DownloadService>();
-        _controller = new PlayerController(core, session, downloads);
+        _controller = new PlayerController(core);
         _controller.Ready += OnEngineReady;
         _controller.Ended += OnEngineEnded;
         _controller.PositionChanged += OnEnginePositionChanged;
@@ -212,8 +264,7 @@ public sealed partial class PlayerHost : UserControl
         PlayPauseButton.IsEnabled =
             SeekBackButton.IsEnabled = SeekForwardButton.IsEnabled = true;
         SeekSlider.IsEnabled = true;
-        PlayPauseIcon.Symbol = Symbol.Pause;
-        MiniPlayIcon.Symbol = Symbol.Pause;
+        OnEnginePauseChanged((_controller?.Engine as MpvEngine)?.IsPaused ?? false);
         if (!_mini)
         {
             ShowTheaterControls();
@@ -383,6 +434,7 @@ public sealed partial class PlayerHost : UserControl
 
     private void HideControlsIfPlaying()
     {
+        if (IsQualityMenuOpen) { _hideControls.Start(); return; }
         if (_mini || _externalChrome || _userSeeking)
         {
             return;
@@ -422,30 +474,40 @@ public sealed partial class PlayerHost : UserControl
 
     private void OnSpaceAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (XamlRoot is null || KeyboardNavigation.IsEditing(XamlRoot)
+            || (!_externalChrome && !KeyboardNavigation.FocusIsWithin(this))) return;
         args.Handled = true;
         OnPlayPauseClick(this, new RoutedEventArgs());
     }
 
     private void OnFullscreenAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (XamlRoot is null || KeyboardNavigation.IsEditing(XamlRoot)
+            || (!_externalChrome && !KeyboardNavigation.FocusIsWithin(this))) return;
         args.Handled = true;
         FullscreenRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnMuteAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (XamlRoot is null || KeyboardNavigation.IsEditing(XamlRoot)
+            || (!_externalChrome && !KeyboardNavigation.FocusIsWithin(this))) return;
         args.Handled = true;
         OnMuteClick(this, new RoutedEventArgs());
     }
 
     private void OnSeekBackAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (XamlRoot is null || KeyboardNavigation.IsEditing(XamlRoot)
+            || (!_externalChrome && !KeyboardNavigation.FocusIsWithin(this))) return;
         args.Handled = true;
         OnSeekBackClick(this, new RoutedEventArgs());
     }
 
     private void OnSeekFwdAccel(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (XamlRoot is null || KeyboardNavigation.IsEditing(XamlRoot)
+            || (!_externalChrome && !KeyboardNavigation.FocusIsWithin(this))) return;
         args.Handled = true;
         OnSeekForwardClick(this, new RoutedEventArgs());
     }

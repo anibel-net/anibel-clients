@@ -27,14 +27,21 @@ public sealed class StringToImageConverter : IValueConverter
             string raw when int.TryParse(raw, out var parsed) && parsed > 0 => parsed,
             _ => 0,
         };
-        var key = height > 0 ? url + "\0" + height : url;
+        var width = parameter is string spec && spec.StartsWith("width:", StringComparison.Ordinal)
+            && int.TryParse(spec.AsSpan(6), out var requestedWidth) ? Math.Clamp(requestedWidth, 1, 4096) : 0;
+        var key = width > 0 ? url + "\0w" + width : height > 0 ? url + "\0" + height : url;
         if (Cache.TryGetValue(key, out var hit))
         {
             return hit;
         }
 
         var image = new BitmapImage();
-        if (height > 0)
+        if (width > 0)
+        {
+            image.DecodePixelType = DecodePixelType.Logical;
+            image.DecodePixelWidth = width;
+        }
+        else if (height > 0)
         {
             image.DecodePixelType = DecodePixelType.Logical;
             image.DecodePixelHeight = height;

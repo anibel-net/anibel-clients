@@ -11,6 +11,7 @@ namespace Anibel.App;
 public sealed partial class MainPage : Page,
     IRecipient<GlobalSearchMessage>,
     IRecipient<OpenMediaMessage>,
+    IRecipient<OpenProfileMessage>,
     IRecipient<NavigateMessage>,
     IRecipient<PlayEpisodeMessage>,
     IRecipient<ReadChapterMessage>,
@@ -33,8 +34,20 @@ public sealed partial class MainPage : Page,
     private string? _navTag;
     private bool _paneWasOpen = true;
     private bool _inAppFullscreen;
-    private PipWindow? _pip;
-    private bool _pipQuiet;
+    // This collection owns native views/windows only. Rust owns media and playback state.
+    private sealed class OpenTitle(string kind, string slug, string title, FrameworkElement host)
+    {
+        public string Kind { get; } = kind;
+        public string Slug { get; } = slug;
+        public string Title { get; } = title;
+        public FrameworkElement Host { get; } = host;
+        public PipWindow? Window { get; set; }
+    }
+
+    private readonly List<OpenTitle> _titles = [];
+    private Task _pendingClose = Task.CompletedTask;
+    private bool _closing;
+    private OpenTitle? DockedTitle => _titles.FirstOrDefault(t => ReferenceEquals(t.Host.Parent, PlayerLayer));
 
     public MainPage()
     {
@@ -55,7 +68,34 @@ public sealed partial class MainPage : Page,
         };
     }
 
+    private async void OnShortcutHelpClick(object sender, RoutedEventArgs e)
+    {
+        if (App.CurrentWindow is MainWindow window) await window.ShowShortcutHelpAsync();
+    }
+
+    internal bool HasDockedMedia => DockedTitle is not null;
+
+    internal void FocusCards()
+    {
+        if (ContentFrame.Content is DependencyObject content)
+            KeyboardNavigation.Find<MediaCollectionView>(content)?.FocusFirstCard();
+    }
+
+    public async Task ClosePlaybackAsync()
+    {
+        _closing = true;
+        foreach (var title in _titles.ToArray()) CloseTitle(title);
+        await _pendingClose;
+    }
+
     public void Receive(GlobalSearchMessage message) => RunGlobalSearch(message.Query);
+    public void Receive(OpenProfileMessage message)
+    {
+        ShowMini();
+        _navTag = null;
+        ContentFrame.Navigate(typeof(ProfilePage), new ProfileArgs(message.Username));
+        SyncBack();
+    }
     public void Receive(OpenMediaMessage message) => RunOpenMedia(message.Slug, message.MediaType);
     public void Receive(NavigateMessage message) => RunNavigate(message.Tag);
     public void Receive(PlayEpisodeMessage message) => _ = PlayEpisodeAsync(message.Args);
@@ -64,308 +104,176 @@ public sealed partial class MainPage : Page,
 
     private async Task PlayEpisodeAsync(PlayerArgs args)
     {
-        MiniHost(ShellReader);
-        ShowTheater(ShellPlayer);
-        await ShellPlayer.PlayAsync(args);
+        if (_closing) return;
+        var title = FindTitle(args.MediaType, args.Slug)
+            ?? AddTitle(args.MediaType, args.Slug, args.TitleLabel, new PlayerHost());
+        ShowTheater(title);
+        await ((PlayerHost)title.Host).PlayAsync(args);
     }
 
     private async Task ReadChapterAsync(ReaderArgs args)
     {
-        MiniHost(ShellPlayer);
-        ShowTheater(ShellReader);
-        await ShellReader.OpenAsync(args);
+        if (_closing) return;
+        var title = FindTitle("manga", args.Slug)
+            ?? AddTitle("manga", args.Slug, args.MediaTitle, new ReaderHost());
+        ShowTheater(title);
+        await ((ReaderHost)title.Host).OpenAsync(args);
     }
 
-    private void ShowTheater(FrameworkElement host)
+    private OpenTitle? FindTitle(string kind, string slug) =>
+        _titles.FirstOrDefault(t => t.Kind == kind && t.Slug == slug);
+
+    private OpenTitle AddTitle(string kind, string slug, string label, FrameworkElement host)
     {
-        if (IsInPip(host))
+        // Move the current view before adding another docked view.
+        ShowMini();
+        var title = new OpenTitle(kind, slug, label, host);
+        _titles.Add(title);
+        if (host is PlayerHost player)
         {
-            DockFromPip(host);
-            return;
+            player.CollapseRequested += (_, _) => MiniHost(title);
+            player.ExpandRequested += (_, _) => ShowTheater(title);
+            player.FullscreenRequested += (_, _) => ToggleFullscreen(title);
+            player.Closed += (_, _) => RemoveTitle(title);
         }
+        else if (host is ReaderHost reader)
+        {
+            reader.CollapseRequested += (_, _) => MiniHost(title);
+            reader.ExpandRequested += (_, _) => ShowTheater(title);
+            reader.FullscreenRequested += (_, _) => ToggleFullscreen(title);
+            reader.Closed += (_, _) => RemoveTitle(title);
+        }
+        return title;
+    }
+
+    private static void SetMini(OpenTitle title, bool mini)
+    {
+        if (title.Host is PlayerHost player) player.SetMini(mini, externalChrome: mini);
+        if (title.Host is ReaderHost reader) reader.SetMini(mini, externalChrome: mini);
+    }
+
+    private void ShowTheater(OpenTitle title)
+    {
+        if (_closing || !_titles.Contains(title)) return;
+        if (DockedTitle is { } current && current != title) MiniHost(current);
+        CloseWindow(title);
         if (!_inAppFullscreen)
         {
-            _paneWasOpen = Nav.IsPaneOpen;
+            if (PlayerLayer.Children.Count == 0) _paneWasOpen = Nav.IsPaneOpen;
             Nav.IsPaneOpen = false;
         }
-        EnsureInPlayerLayer(host);
-        host.Visibility = Visibility.Visible;
-        host.HorizontalAlignment = HorizontalAlignment.Stretch;
-        host.VerticalAlignment = VerticalAlignment.Stretch;
-        host.Width = double.NaN;
-        host.Height = double.NaN;
-        host.Margin = new Thickness(0);
-        if (host == ShellPlayer) ShellPlayer.SetMini(false);
-        if (host == ShellReader) ShellReader.SetMini(false);
-        Canvas.SetZIndex(PlayerLayer, 2);
-        Canvas.SetZIndex(host, 3);
+        if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);
+        PlayerLayer.Children.Add(title.Host);
+        title.Host.Visibility = Visibility.Visible;
+        title.Host.Width = double.NaN;
+        title.Host.Height = double.NaN;
+        title.Host.Margin = new Thickness(0);
+        title.Host.HorizontalAlignment = HorizontalAlignment.Stretch;
+        title.Host.VerticalAlignment = VerticalAlignment.Stretch;
+        SetMini(title, false);
         SyncOverlayLayer();
-        SyncBack();
     }
 
-    private void MiniHost(FrameworkElement host)
+    private void MiniHost(OpenTitle title)
     {
-        if (host.Visibility != Visibility.Visible)
-        {
-            return;
-        }
-        if (IsInPip(host))
-        {
-            return;
-        }
+        if (_closing || title.Window is not null || !_titles.Contains(title)) return;
         ExitInAppFullscreen();
-        Nav.IsPaneOpen = _paneWasOpen;
-        if (TryEnterPip(host))
+        var pip = new PipWindow(title.Title, title.Host is ReaderHost);
+        title.Window = pip;
+        pip.RestoreRequested += () => ShowTheater(title);
+        pip.ClosedByUser += () =>
         {
-            return;
-        }
-        MiniHostInApp(host);
-    }
-
-    private void MiniHostInApp(FrameworkElement host)
-    {
-        EnsureInPlayerLayer(host);
-        var isReader = host == ShellReader;
-        host.HorizontalAlignment = HorizontalAlignment.Right;
-        host.VerticalAlignment = VerticalAlignment.Bottom;
-        host.Width = isReader ? 260 : 360;
-        host.Height = isReader ? 340 : 220;
-        host.Margin = new Thickness(16);
-        if (host == ShellPlayer) ShellPlayer.SetMini(true);
-        if (host == ShellReader) ShellReader.SetMini(true);
-        Canvas.SetZIndex(PlayerLayer, 4);
-        Canvas.SetZIndex(host, 4);
-        SyncOverlayLayer();
-        SyncBack();
-    }
-
-    private void ShowMini()
-    {
-        if (IsInPip(ShellPlayer) || IsInPip(ShellReader))
-        {
-            return;
-        }
-        if (ShellPlayer.Visibility == Visibility.Visible)
-        {
-            MiniHost(ShellPlayer);
-            return;
-        }
-        MiniHost(ShellReader);
-    }
-
-    private bool IsInPip(FrameworkElement host) =>
-        _pip is not null && ReferenceEquals(_pip.HostedContent, host);
-
-    private bool TryEnterPip(FrameworkElement host)
-    {
+            pip.Detach();
+            title.Window = null;
+            CloseTitle(title);
+        };
         try
         {
-            _pip ??= CreatePipWindow();
-            if (!_pip.EnterOverlay())
-            {
-                ClosePipQuiet();
-                return false;
-            }
-            if (_pip.HostedContent is FrameworkElement other && !ReferenceEquals(other, host))
-            {
-                var displaced = _pip.Detach() as FrameworkElement;
-                if (displaced is not null)
-                {
-                    MiniHostInApp(displaced);
-                }
-            }
-            Reparent(host, _pip);
-            if (host == ShellPlayer) ShellPlayer.SetMini(true, externalChrome: true);
-            if (host == ShellReader) ShellReader.SetMini(true, externalChrome: true);
-            host.DispatcherQueue.TryEnqueue(() =>
-            {
-                if (host == ShellPlayer) ShellPlayer.SetMini(true, externalChrome: true);
-                if (host == ShellReader) ShellReader.SetMini(true, externalChrome: true);
-            });
-            _pip.Activate();
-            SyncOverlayLayer();
-            SyncBack();
-            return true;
+            pip.EnterOverlay(_titles.Count(t => t.Window is not null) - 1);
+            if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);
+            pip.Attach(title.Host);
+            SetMini(title, true);
+            pip.Activate();
+            Nav.IsPaneOpen = _paneWasOpen;
         }
         catch (Exception ex)
         {
             Diag.Log($"pip: {ex.Message}");
-            ClosePipQuiet();
-            return false;
-        }
-    }
-
-    private PipWindow CreatePipWindow()
-    {
-        var pip = new PipWindow();
-        pip.RestoreRequested += OnPipRestore;
-        pip.ClosedByUser += OnPipClosedByUser;
-        return pip;
-    }
-
-    private void OnPipRestore()
-    {
-        var host = _pip?.HostedContent as FrameworkElement;
-        if (host is null)
-        {
-            ClosePipQuiet();
-            return;
-        }
-        DockFromPip(host);
-    }
-
-    private void OnPipClosedByUser()
-    {
-        var host = _pip?.HostedContent as FrameworkElement;
-        _pip = null;
-        if (host is PlayerHost player)
-        {
-            EnsureInPlayerLayer(player);
-            player.Close();
-        }
-        else if (host is ReaderHost reader)
-        {
-            EnsureInPlayerLayer(reader);
-            reader.Close();
-        }
-        else if (host is not null)
-        {
-            EnsureInPlayerLayer(host);
+            CloseWindow(title);
+            // Keep the title in the open list if the OS cannot create a window.
+            if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);
         }
         SyncOverlayLayer();
-        SyncBack();
     }
 
-    private void DockFromPip(FrameworkElement host)
+    private void ShowMini()
     {
-        ClosePipQuiet();
-        EnsureInPlayerLayer(host);
-        ShowTheater(host);
+        if (DockedTitle is { } title) MiniHost(title);
     }
 
-    private void ClosePipQuiet()
+    private static void CloseWindow(OpenTitle title)
     {
-        if (_pip is null)
-        {
-            return;
-        }
-        _pipQuiet = true;
-        try
-        {
-            var leftover = _pip.Detach() as FrameworkElement;
-            _pip.CloseQuiet();
-            if (leftover is not null && leftover.Parent is null)
-            {
-                EnsureInPlayerLayer(leftover);
-            }
-        }
-        finally
-        {
-            _pip = null;
-            _pipQuiet = false;
-        }
+        var window = title.Window;
+        title.Window = null;
+        if (window is null) return;
+        window.Detach();
+        window.CloseQuiet();
     }
 
-    private void Reparent(FrameworkElement host, PipWindow pip)
+    private static void CloseTitle(OpenTitle title)
     {
-        if (host.Parent is Panel parent)
-        {
-            parent.Children.Remove(host);
-        }
-        pip.Attach(host);
+        if (title.Host is PlayerHost player) player.Close();
+        if (title.Host is ReaderHost reader) reader.Close();
     }
 
-    private void EnsureInPlayerLayer(FrameworkElement host)
+    private void RemoveTitle(OpenTitle title)
     {
-        if (ReferenceEquals(host.Parent, PlayerLayer))
+        if (!_titles.Contains(title)) return;
+        if (ReferenceEquals(title.Host.Parent, PlayerLayer))
         {
-            return;
+            ExitInAppFullscreen();
+            Nav.IsPaneOpen = _paneWasOpen;
         }
-        if (host.Parent is Panel parent)
-        {
-            parent.Children.Remove(host);
-        }
-        if (!PlayerLayer.Children.Contains(host))
-        {
-            PlayerLayer.Children.Add(host);
-        }
-    }
-
-    private void OnPlayerCollapse(object sender, EventArgs e) => MiniHost(ShellPlayer);
-    private void OnPlayerExpand(object sender, EventArgs e)
-    {
-        MiniHost(ShellReader);
-        ShowTheater(ShellPlayer);
-    }
-
-    private void OnPlayerClosed(object sender, EventArgs e)
-    {
-        if (!_pipQuiet && IsInPip(ShellPlayer))
-        {
-            ClosePipQuiet();
-        }
-        ExitInAppFullscreen();
-        Nav.IsPaneOpen = _paneWasOpen;
-        ShellPlayer.Visibility = Visibility.Collapsed;
-        EnsureInPlayerLayer(ShellPlayer);
+        CloseWindow(title);
+        if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);
+        _titles.Remove(title);
+        if (title.Host is PlayerHost player)
+            _pendingClose = _pendingClose.IsCompleted ? player.ReportsCompleted
+                : Task.WhenAll(_pendingClose, player.ReportsCompleted);
         SyncOverlayLayer();
-        SyncBack();
-    }
-
-    private void OnReaderCollapse(object sender, EventArgs e) => MiniHost(ShellReader);
-    private void OnReaderExpand(object sender, EventArgs e)
-    {
-        MiniHost(ShellPlayer);
-        ShowTheater(ShellReader);
-    }
-
-    private void OnReaderClosed(object sender, EventArgs e)
-    {
-        if (!_pipQuiet && IsInPip(ShellReader))
-        {
-            ClosePipQuiet();
-        }
-        ExitInAppFullscreen();
-        Nav.IsPaneOpen = _paneWasOpen;
-        ShellReader.Visibility = Visibility.Collapsed;
-        EnsureInPlayerLayer(ShellReader);
-        SyncOverlayLayer();
-        SyncBack();
     }
 
     private void SyncOverlayLayer()
     {
-        var inPip = _pip is not null;
-        var active = !inPip && (ShellPlayer.Visibility == Visibility.Visible
-            || ShellReader.Visibility == Visibility.Visible);
+        var active = PlayerLayer.Children.Count > 0;
         PlayerLayer.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
         PlayerLayer.IsHitTestVisible = active;
+        OpenTitlesButton.Visibility = _titles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        OpenTitlesMenu.Items.Clear();
+        foreach (var title in _titles)
+        {
+            var item = new MenuFlyoutSubItem { Text = title.Title };
+            var show = new MenuFlyoutItem { Text = "Адкрыць" };
+            show.Click += (_, _) => ShowTheater(title);
+            var pip = new MenuFlyoutItem { Text = "Выплыўное акно" };
+            pip.Click += (_, _) => { if (title.Window is { } window) window.Activate(); else MiniHost(title); };
+            var close = new MenuFlyoutItem { Text = "Закрыць" };
+            close.Click += (_, _) => CloseTitle(title);
+            item.Items.Add(show);
+            item.Items.Add(pip);
+            item.Items.Add(close);
+            OpenTitlesMenu.Items.Add(item);
+        }
+        SyncBack();
     }
 
-    private void OnPlayerFullscreen(object sender, EventArgs e)
+    private void ToggleFullscreen(OpenTitle title)
     {
-        if (_inAppFullscreen)
-        {
-            ExitInAppFullscreen();
-            return;
-        }
-        MiniHost(ShellReader);
-        ShowTheater(ShellPlayer);
+        if (_inAppFullscreen) { ExitInAppFullscreen(); return; }
+        ShowTheater(title);
         EnterInAppFullscreen();
-        ShellPlayer.SetOsFullscreen(true);
-    }
-
-    private void OnReaderFullscreen(object sender, EventArgs e)
-    {
-        if (_inAppFullscreen)
-        {
-            ExitInAppFullscreen();
-            return;
-        }
-        MiniHost(ShellPlayer);
-        ShowTheater(ShellReader);
-        EnterInAppFullscreen();
-        ShellReader.SetOsFullscreen(true);
+        if (title.Host is PlayerHost player) player.SetOsFullscreen(true);
+        if (title.Host is ReaderHost reader) reader.SetOsFullscreen(true);
     }
 
     private void EnterInAppFullscreen()
@@ -378,7 +286,7 @@ public sealed partial class MainPage : Page,
         {
             window.EnterVideoFullscreen();
         }
-        ShellPlayer.Focus(FocusState.Programmatic);
+        (DockedTitle?.Host as Control)?.Focus(FocusState.Programmatic);
     }
 
     private void ExitInAppFullscreen()
@@ -395,8 +303,8 @@ public sealed partial class MainPage : Page,
         {
             window.ExitVideoFullscreen();
         }
-        ShellPlayer.SetOsFullscreen(false);
-        ShellReader.SetOsFullscreen(false);
+        if (DockedTitle?.Host is PlayerHost player) player.SetOsFullscreen(false);
+        if (DockedTitle?.Host is ReaderHost reader) reader.SetOsFullscreen(false);
     }
 
     private void OnPageKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -455,46 +363,14 @@ public sealed partial class MainPage : Page,
     private void OnContentNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
         => SyncBack();
 
-    private void SyncBack()
-    {
-        var overlayOpen =
-            _inAppFullscreen
-            || (ShellPlayer.Visibility == Visibility.Visible && !ShellPlayer.IsMini)
-            || (ShellReader.Visibility == Visibility.Visible && !ShellReader.IsMini);
-        var enabled = overlayOpen || ContentFrame.CanGoBack || ContentFrame.BackStackDepth > 0;
-        Nav.IsBackEnabled = enabled;
-    }
+    private void SyncBack() =>
+        Nav.IsBackEnabled = _inAppFullscreen || DockedTitle is not null || ContentFrame.CanGoBack;
 
     private void OnBackRequested(NavigationView sender, NavigationViewBackRequestedEventArgs args)
     {
-        if (ShellPlayer.Visibility == Visibility.Visible && !ShellPlayer.IsMini)
-        {
-            if (_inAppFullscreen)
-            {
-                ExitInAppFullscreen();
-                SyncBack();
-                return;
-            }
-            MiniHost(ShellPlayer);
-            SyncBack();
-            return;
-        }
-        if (ShellReader.Visibility == Visibility.Visible && !ShellReader.IsMini)
-        {
-            if (_inAppFullscreen)
-            {
-                ExitInAppFullscreen();
-                SyncBack();
-                return;
-            }
-            MiniHost(ShellReader);
-            SyncBack();
-            return;
-        }
-        if (ContentFrame.CanGoBack)
-        {
-            ContentFrame.GoBack();
-        }
+        if (_inAppFullscreen) ExitInAppFullscreen();
+        else if (DockedTitle is { } title) MiniHost(title);
+        else if (ContentFrame.CanGoBack) ContentFrame.GoBack();
         SyncBack();
     }
 

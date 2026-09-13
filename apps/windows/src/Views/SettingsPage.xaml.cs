@@ -72,15 +72,9 @@ public sealed partial class SettingsPage : Page
 
     private async void OnClearCacheClick(object sender, RoutedEventArgs e)
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Anibel", "playback");
         try
         {
-            if (Directory.Exists(dir))
-            {
-                Directory.Delete(dir, true);
-            }
+            await App.Services.GetRequiredService<ICoreClient>().CallAsync<System.Text.Json.JsonElement>("clearPlaybackAssets");
             ShowStatus(Strings.CacheCleared);
         }
         catch (Exception ex)
@@ -90,11 +84,11 @@ public sealed partial class SettingsPage : Page
         await Task.CompletedTask;
     }
 
-    private void OnClearApiCacheClick(object sender, RoutedEventArgs e)
+    private async void OnClearApiCacheClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            App.Services.GetRequiredService<ApiCache>().Clear();
+            await App.Services.GetRequiredService<CoreClient>().ClearCacheAsync();
             ShowStatus(Strings.CatalogCacheCleared);
         }
         catch (Exception ex)

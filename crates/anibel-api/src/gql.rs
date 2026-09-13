@@ -393,3 +393,20 @@ mod tests {
         assert_eq!(first.title.as_ref().unwrap().be, "Т");
     }
 }
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "graphql/schema.graphql",
+    query_path = "graphql/ops/update_profile.graphql",
+    response_derives = "Debug, Clone, Serialize",
+    variables_derives = "Deserialize"
+)]
+pub struct UpdateProfileMutation;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "graphql/schema.graphql",
+    query_path = "graphql/ops/add_rating.graphql",
+    response_derives = "Debug, Clone, Serialize"
+)]
+pub struct AddRatingMutation;

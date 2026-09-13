@@ -10,6 +10,7 @@ public partial class ProfileViewModel : ObservableObject
 {
     private readonly ICoreClient _core;
     private readonly SessionService _session;
+    private object? _profileRequest;
 
     public ProfileViewModel(ICoreClient core, SessionService session)
     {
@@ -32,6 +33,42 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private long plannedCount;
     [ObservableProperty] private long droppedCount;
     [ObservableProperty] private bool hubBusy;
+    [ObservableProperty] private ProfileDto? profile;
+    [ObservableProperty] private bool isOwn;
+
+    public async Task LoadProfileAsync(string? username = null)
+    {
+        var request = _profileRequest = new object();
+        var revision = _session.Revision;
+        RefreshFlags();
+        Profile = null;
+        IsOwn = false;
+        IsBusy = false;
+        if (string.IsNullOrWhiteSpace(username) && !IsLoggedIn) return;
+        IsBusy = true;
+        StatusMessage = null;
+        try
+        {
+            var result = await _core.CallAsync<ProfileViewDto>("profile", new { username });
+            if (!ReferenceEquals(request, _profileRequest) || revision != _session.Revision) return;
+            Profile = result.Profile;
+            IsOwn = result.IsOwn;
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(request, _profileRequest) && revision == _session.Revision)
+                StatusMessage = Ui.DisplayMessage(ex);
+        }
+        finally { if (ReferenceEquals(request, _profileRequest)) IsBusy = false; }
+    }
+
+    public async Task UpdateProfileAsync(object patch)
+    {
+        var result = await _core.CallAsync<ProfileDto>("updateProfile", patch);
+        Profile = result;
+        await _session.RefreshAsync();
+        WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
+    }
 
     public bool HasStatus => !string.IsNullOrEmpty(StatusMessage);
     partial void OnStatusMessageChanged(string? value) => OnPropertyChanged(nameof(HasStatus));
@@ -67,34 +104,12 @@ public partial class ProfileViewModel : ObservableObject
         HubBusy = true;
         try
         {
-            var user = _session.Username;
-            var fav = await _core.FavoritesAsync(user, null, 0, 1);
-            FavoriteCount = fav.TotalDocs;
-            long watching = 0, watched = 0, planned = 0, dropped = 0;
-            foreach (var type in new[] { "anime", "manga", "cinema", "games", "books" })
-            {
-                try
-                {
-                    var s = await _core.StatusAsync(user, type);
-                    if (s is null)
-                    {
-                        continue;
-                    }
-                    watching += s.Watching ?? 0;
-                    watched += s.Watched ?? 0;
-                    planned += s.Planned ?? 0;
-                    dropped += s.Dropped ?? 0;
-                }
-                catch (Exception ex)
-                {
-                    // one media type missing counters must not hide the rest
-                    Diag.Log($"profile hub: status({type}) FAILED {ex.Message}");
-                }
-            }
-            InProgressCount = watching;
-            DoneCount = watched;
-            PlannedCount = planned;
-            DroppedCount = dropped;
+            var hub = await _core.CallAsync<ProfileHubDto>("profileHub");
+            FavoriteCount = hub.Favorites;
+            InProgressCount = hub.InProgress;
+            DoneCount = hub.Done;
+            PlannedCount = hub.Planned;
+            DroppedCount = hub.Dropped;
         }
         catch (Exception ex)
         {
@@ -120,14 +135,7 @@ public partial class ProfileViewModel : ObservableObject
         StatusMessage = null;
         try
         {
-            var user = await _core.LoginAsync(Username.Trim(), Password);
-            if (string.IsNullOrEmpty(user.Token))
-            {
-                LoginError = true;
-                StatusMessage = Strings.NoTokenTryAgain;
-                return;
-            }
-            _session.Save(user.Username, user.Id, user.Avatar, user.Token);
+            await _session.LoginAsync(Username.Trim(), Password);
             WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
             StatusMessage = null;
             Password = "";
@@ -147,9 +155,8 @@ public partial class ProfileViewModel : ObservableObject
     [RelayCommand]
     public async Task LogoutAsync()
     {
-        try { await _core.LogoutAsync(); }
+        try { await _session.LogoutAsync(); }
         catch { /* local logout even if network fails */ }
-        _session.Clear();
         WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
         RefreshFlags();
     }

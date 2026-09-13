@@ -222,32 +222,36 @@ impl AnibelApi {
         }
 
         let response = req.send().await.map_err(reqwest_err)?;
-        let status = response.status();
-        let text = response
-            .text()
-            .await
-            .map_err(|e| AnibelError::Decode(format!("body read: {e}")))?;
-        let body: Value = serde_json::from_str(&text).map_err(|e| {
-            let preview = text.chars().take(200).collect::<String>();
-            AnibelError::Decode(format!("status={status} body-start=`{preview}` err={e}"))
-        })?;
-
-        if let Some(errors) = body.get("errors").and_then(Value::as_array)
-            && !errors.is_empty()
-        {
-            return Err(graphql_errors(errors));
-        }
-
-        if !status.is_success() {
-            return Err(AnibelError::Http(status.as_u16(), body.to_string()));
-        }
-
-        let data = body
-            .get("data")
-            .ok_or_else(|| AnibelError::Graphql("no data in response".into()))?;
-
-        serde_json::from_value(data.clone()).map_err(|e| AnibelError::Decode(e.to_string()))
+        decode_response(response).await
     }
+}
+
+pub(crate) async fn decode_response(response: reqwest::Response) -> Result<Value> {
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| AnibelError::Decode(format!("body read: {e}")))?;
+    let body: Value = serde_json::from_str(&text).map_err(|e| {
+        let preview = text.chars().take(200).collect::<String>();
+        AnibelError::Decode(format!("status={status} body-start=`{preview}` err={e}"))
+    })?;
+
+    if let Some(errors) = body.get("errors").and_then(Value::as_array)
+        && !errors.is_empty()
+    {
+        return Err(graphql_errors(errors));
+    }
+
+    if !status.is_success() {
+        return Err(AnibelError::Http(status.as_u16(), body.to_string()));
+    }
+
+    let data = body
+        .get("data")
+        .ok_or_else(|| AnibelError::Graphql("no data in response".into()))?;
+
+    Ok(data.clone())
 }
 
 #[cfg(test)]

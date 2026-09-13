@@ -13,14 +13,14 @@ using Windows.Graphics;
 namespace Anibel.App.Playback;
 
 /// <summary>
-/// Browser-style PiP: always-on-top, resizable 16:9, no title bar, hover chrome only.
+/// One title per window. Video uses 16:9; manga uses a freely resizable reading window.
 /// </summary>
 public sealed partial class PipWindow : Window
 {
-    public static PipWindow? Active { get; private set; }
+    private readonly bool _reader;
 
-    private const int MinWidth = 400;
     private bool _quiet;
+    private bool _controlsHovered;
     private bool _sizing;
     private bool _updatingSeek;
     private bool _dragging;
@@ -35,11 +35,15 @@ public sealed partial class PipWindow : Window
 
     public UIElement? HostedContent => _content;
 
-    public PipWindow()
+    public PipWindow(string title, bool reader)
     {
         InitializeComponent();
-        Title = "Anibel.Net";
-        Active = this;
+        Title = title;
+        _reader = reader;
+        WindowTitle.Text = title;
+        ReaderDragHandle.Visibility = reader ? Visibility.Visible : Visibility.Collapsed;
+        Shade.Visibility = reader ? Visibility.Collapsed : Visibility.Visible;
+        Chrome.Background = reader ? null : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         var icon = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
         if (System.IO.File.Exists(icon))
         {
@@ -54,7 +58,7 @@ public sealed partial class PipWindow : Window
         HideChrome();
     }
 
-    public bool EnterOverlay()
+    public void EnterOverlay(int slot)
     {
         try
         {
@@ -73,9 +77,8 @@ public sealed partial class PipWindow : Window
 
         var size = DefaultSize();
         AppWindow.Resize(size);
-        PlaceBottomRight();
+        PlaceBottomRight(slot);
         HideChrome();
-        return true;
     }
 
     public void Attach(UIElement content)
@@ -132,6 +135,7 @@ public sealed partial class PipWindow : Window
     private void BindPlayer(PlayerHost player)
     {
         _player = player;
+        QualityButton.Visibility = Visibility.Visible;
         PlayButton.Visibility = Visibility.Visible;
         SeekSlider.Visibility = Visibility.Visible;
         PlayIcon.Symbol = player.IsPaused ? Symbol.Play : Symbol.Pause;
@@ -141,6 +145,7 @@ public sealed partial class PipWindow : Window
 
     private void DetachPlayer()
     {
+        QualityButton.Visibility = Visibility.Collapsed;
         if (_player is null)
         {
             return;
@@ -170,6 +175,11 @@ public sealed partial class PipWindow : Window
     private void OnPlayClick(object sender, RoutedEventArgs e)
         => _player?.TogglePlayback();
 
+    private async void OnQualityClick(object sender, RoutedEventArgs e)
+    {
+        if (_player is { } player) await player.ShowQualityMenuAsync((FrameworkElement)sender);
+    }
+
     private void OnSeekChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_updatingSeek)
@@ -193,13 +203,16 @@ public sealed partial class PipWindow : Window
 
     private void OnRootPointerExited(object sender, PointerRoutedEventArgs e)
     {
+        var point = e.GetCurrentPoint(Root).Position;
+        if (point.X >= 0 && point.Y >= 0 && point.X < Root.ActualWidth && point.Y < Root.ActualHeight) return;
         _hideChrome.Stop();
         HideChrome();
     }
 
     private void ShowChrome()
     {
-        Chrome.Visibility = Visibility.Visible;
+        Chrome.Opacity = 1;
+        if (_content is ReaderHost reader) reader.SetOverlayVisible(true);
         Chrome.IsHitTestVisible = true;
         _hideChrome.Stop();
         _hideChrome.Start();
@@ -207,17 +220,20 @@ public sealed partial class PipWindow : Window
 
     private void HideChrome()
     {
-        if (_dragging)
+        if (_dragging || _controlsHovered || _player?.IsQualityMenuOpen == true || _content is ReaderHost { KeepOverlayVisible: true }
+            || (Root.XamlRoot is not null && FocusManager.GetFocusedElement(Root.XamlRoot) is Control { FocusState: FocusState.Keyboard } && KeyboardNavigation.FocusIsWithin(Chrome)))
         {
+            _hideChrome.Start();
             return;
         }
-        Chrome.Visibility = Visibility.Collapsed;
+        Chrome.Opacity = 0;
+        if (_content is ReaderHost reader) reader.SetOverlayVisible(false);
         Chrome.IsHitTestVisible = false;
     }
 
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (IsControlSource(e.OriginalSource) || !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
+        if ((_reader && !IsWithin(e.OriginalSource, ReaderDragHandle)) || IsControlSource(e.OriginalSource) || !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
         {
             return;
         }
@@ -241,8 +257,8 @@ public sealed partial class PipWindow : Window
             return;
         }
         AppWindow.Move(new PointInt32(
-            _dragOrigin.X + (now.X - _dragCursor.X),
-            _dragOrigin.Y + (now.Y - _dragCursor.Y)));
+            (int)Math.Clamp((long)_dragOrigin.X + now.X - _dragCursor.X, int.MinValue, int.MaxValue),
+            (int)Math.Clamp((long)_dragOrigin.Y + now.Y - _dragCursor.Y, int.MinValue, int.MaxValue)));
     }
 
     private void OnDragReleased(object sender, PointerRoutedEventArgs e)
@@ -260,12 +276,25 @@ public sealed partial class PipWindow : Window
         }
     }
 
+    private void OnControlsEntered(object sender, PointerRoutedEventArgs e) => _controlsHovered = true;
+    private void OnControlsExited(object sender, PointerRoutedEventArgs e) { _controlsHovered = false; ShowChrome(); }
+    private void OnRootGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (FocusManager.GetFocusedElement(Root.XamlRoot) is Control { FocusState: FocusState.Keyboard }) ShowChrome();
+    }
+    private static bool IsWithin(object source, DependencyObject ancestor)
+    {
+        for (var current = source as DependencyObject; current is not null; current = VisualTreeHelper.GetParent(current))
+            if (ReferenceEquals(current, ancestor)) return true;
+        return false;
+    }
+
     private static bool IsControlSource(object source)
     {
         var current = source as DependencyObject;
         while (current is not null)
         {
-            if (current is Button or Slider)
+            if (current is ButtonBase or Slider or ComboBox)
             {
                 return true;
             }
@@ -281,40 +310,23 @@ public sealed partial class PipWindow : Window
             return;
         }
         var max = MaxSize();
-        var w = Math.Clamp(sender.Size.Width, MinWidth, max.Width);
-        var h = (int)Math.Round(w * 9.0 / 16.0);
-        if (h > max.Height)
-        {
-            h = max.Height;
-            w = (int)Math.Round(h * 16.0 / 9.0);
-            w = Math.Clamp(w, MinWidth, max.Width);
-            h = (int)Math.Round(w * 9.0 / 16.0);
-        }
-        if (Math.Abs(sender.Size.Width - w) > 2 || Math.Abs(sender.Size.Height - h) > 2)
+        var size = _reader
+            ? PipSize.Reader(sender.Size.Width, sender.Size.Height, max.Width, max.Height, Root.XamlRoot?.RasterizationScale ?? 1)
+            : PipSize.Video(sender.Size.Width, max.Width, max.Height);
+        if (Math.Abs(sender.Size.Width - size.Width) > 2 || Math.Abs(sender.Size.Height - size.Height) > 2)
         {
             _sizing = true;
-            try
-            {
-                sender.Resize(new SizeInt32(w, h));
-            }
-            finally
-            {
-                _sizing = false;
-            }
+            try { sender.Resize(new SizeInt32(size.Width, size.Height)); }
+            finally { _sizing = false; }
         }
     }
 
     private SizeInt32 DefaultSize()
     {
         var max = MaxSize();
-        var w = Math.Clamp((int)Math.Round(max.Width * 0.42), 720, Math.Min(1280, max.Width));
-        var h = (int)Math.Round(w * 9.0 / 16.0);
-        if (h > max.Height)
-        {
-            h = max.Height;
-            w = (int)Math.Round(h * 16.0 / 9.0);
-        }
-        return new SizeInt32(Math.Max(MinWidth, w), Math.Max(1, h));
+        if (_reader) return new SizeInt32(Math.Min(520, max.Width), Math.Min(780, max.Height));
+        var size = PipSize.Video(Math.Min(960, (int)(max.Width * 0.42)), max.Width, max.Height);
+        return new SizeInt32(size.Width, size.Height);
     }
 
     private SizeInt32 MaxSize()
@@ -322,8 +334,8 @@ public sealed partial class PipWindow : Window
         try
         {
             var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
-            var w = Math.Max(MinWidth, work.Width - 32);
-            var h = Math.Max(MinWidth * 9 / 16, work.Height - 32);
+            var w = Math.Max(1, work.Width - 32);
+            var h = Math.Max(1, work.Height - 32);
             return new SizeInt32(w, h);
         }
         catch
@@ -337,25 +349,22 @@ public sealed partial class PipWindow : Window
         _hideChrome.Stop();
         AppWindow.Changed -= OnAppWindowChanged;
         DetachPlayer();
-        if (ReferenceEquals(Active, this))
-        {
-            Active = null;
-        }
         if (!_quiet)
         {
             ClosedByUser?.Invoke();
         }
     }
 
-    private void PlaceBottomRight()
+    private void PlaceBottomRight(int slot)
     {
         try
         {
             var display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest);
             var work = display.WorkArea;
             var size = AppWindow.Size;
-            var x = work.X + work.Width - size.Width - 24;
-            var y = work.Y + work.Height - size.Height - 48;
+            var offset = Math.Clamp(slot, 0, 7) * 32;
+            var x = work.X + work.Width - size.Width - 24 - offset;
+            var y = work.Y + work.Height - size.Height - 48 - offset;
             AppWindow.Move(new PointInt32(Math.Max(work.X, x), Math.Max(work.Y, y)));
         }
         catch (Exception ex)

@@ -19,9 +19,9 @@ namespace Anibel.App;
 /// Title bar follows the Microsoft Store pattern: branding, centered search, account.
 /// </summary>
 public sealed partial class MainWindow : Window,
-    IRecipient<SessionChangedMessage>,
-    IRecipient<SessionExpiredMessage>
+    IRecipient<SessionChangedMessage>
 {
+    private enum ClosePhase { Active, Waiting, Complete }
     private const double TitleVisibleMinWidth = 820;
     private const double SearchMaxWidth = 520;
     private readonly DispatcherQueueTimer _suggestTimer;
@@ -31,9 +31,69 @@ public sealed partial class MainWindow : Window,
     private bool _layoutBusy;
     private bool _removingHistory;
 
+    private readonly ShortcutMap _shortcuts = new();
+    private ContentDialog? _shortcutHelp;
+
+    private async void OnWindowKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (_shortcutHelp is not null) { _shortcuts.Reset(); return; }
+        var shortcut = _shortcuts.Read(e.Key, KeyboardNavigation.Modifiers,
+            KeyboardNavigation.IsEditing(WindowRoot.XamlRoot), System.Diagnostics.Stopwatch.GetElapsedTime(0));
+        if (shortcut is null) return;
+        if (shortcut.Action == ShortcutAction.FocusCards && RootFrame.Content is MainPage mediaPage && mediaPage.HasDockedMedia)
+            return;
+        e.Handled = true;
+        switch (shortcut.Action)
+        {
+            case ShortcutAction.Help: await ShowShortcutHelpAsync(); break;
+            case ShortcutAction.Search: GlobalSearch.Focus(FocusState.Keyboard); break;
+            case ShortcutAction.Navigate:
+                WeakReferenceMessenger.Default.Send(new NavigateMessage(shortcut.Page!)); break;
+            case ShortcutAction.Back:
+                WeakReferenceMessenger.Default.Send(new GoBackMessage()); break;
+            case ShortcutAction.FocusCards:
+                if (RootFrame.Content is MainPage page) page.FocusCards(); break;
+        }
+    }
+
+    internal async Task ShowShortcutHelpAsync()
+    {
+        if (_shortcutHelp is not null) return;
+        var previous = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(WindowRoot.XamlRoot) as Control;
+        var help = new Views.ShortcutHelpView { Width = Math.Clamp(WindowRoot.ActualWidth - 96, 240, 980) };
+        _shortcutHelp = new ContentDialog
+        {
+            XamlRoot = WindowRoot.XamlRoot,
+            Title = "Спалучэнні клавіш",
+            CloseButtonText = "Закрыць",
+            Content = new ScrollViewer
+            {
+                Content = help, MaxHeight = Math.Max(180, WindowRoot.ActualHeight - 200),
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            },
+        };
+        _shortcutHelp.Resources["ContentDialogMaxWidth"] = 1060.0;
+        try { await _shortcutHelp.ShowAsync(); }
+        finally
+        {
+            _shortcutHelp = null;
+            _shortcuts.Reset();
+            if (previous?.XamlRoot == WindowRoot.XamlRoot) previous.Focus(FocusState.Keyboard);
+        }
+    }
+
     public MainWindow()
     {
         InitializeComponent();
+        Activated += (_, _) => _shortcuts.Reset();
+        WindowRoot.SizeChanged += (_, _) =>
+        {
+            if (_shortcutHelp?.Content is ScrollViewer { Content: Views.ShortcutHelpView help } scroll)
+            {
+                help.Width = Math.Clamp(WindowRoot.ActualWidth - 96, 240, 980);
+                scroll.MaxHeight = Math.Max(180, WindowRoot.ActualHeight - 200);
+            }
+        };
         Title = "Anibel.Net";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -60,17 +120,28 @@ public sealed partial class MainWindow : Window,
             RefreshAccount();
             LayoutTitleBar();
         };
+        var closePhase = ClosePhase.Active;
+        AppWindow.Closing += async (_, e) =>
+        {
+            if (closePhase == ClosePhase.Complete) return;
+            e.Cancel = true;
+            if (closePhase == ClosePhase.Waiting) return;
+            closePhase = ClosePhase.Waiting;
+            try { if (RootFrame.Content is MainPage page) await page.ClosePlaybackAsync(); }
+            finally { closePhase = ClosePhase.Complete; DispatcherQueue.TryEnqueue(Close); }
+        };
         Closed += (_, _) =>
         {
+            _suggestTimer.Stop();
+            _suggestCts.Cancel();
+            _suggestCts.Dispose();
             WeakReferenceMessenger.Default.UnregisterAll(this);
-            Playback.PipWindow.Active?.CloseQuiet();
         };
 
         RootFrame.Navigate(typeof(MainPage));
     }
 
     public void Receive(SessionChangedMessage message) => RefreshAccount();
-    public void Receive(SessionExpiredMessage message) => RefreshAccount();
 
     public void SetTitleBarVisible(bool visible)
     {
@@ -134,6 +205,7 @@ public sealed partial class MainWindow : Window,
         {
             return;
         }
+        _suggestCts.Cancel();
         _suggestQuery = sender.Text ?? "";
         var q = _suggestQuery.Trim();
         ShowLocalSuggestions(_suggestQuery);
@@ -175,7 +247,7 @@ public sealed partial class MainWindow : Window,
         {
             var core = App.Services.GetRequiredService<ICoreClient>();
             var hits = await core.SearchAsync(q, QuickSearch.FetchCount, ct);
-            if (ct.IsCancellationRequested)
+            if (ct.IsCancellationRequested || q != (GlobalSearch.Text ?? "").Trim())
             {
                 return;
             }
@@ -239,14 +311,15 @@ public sealed partial class MainWindow : Window,
         OpenFullSearch(args.QueryText);
     }
 
-    private void OnRemoveHistoryClick(object sender, RoutedEventArgs e)
+    private async void OnRemoveHistoryClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string query } || query.Length == 0)
         {
             return;
         }
         _removingHistory = true;
-        _searchHistory.Remove(query);
+        try { await _searchHistory.Remove(query); }
+        catch (Exception ex) { Diag.Log($"search history: {ex.Message}"); }
         ShowLocalSuggestions(GlobalSearch.Text);
         if (GlobalSearch.Text?.Trim().Length >= 2)
         {
@@ -265,11 +338,11 @@ public sealed partial class MainWindow : Window,
         WeakReferenceMessenger.Default.Send(new GlobalSearchMessage(text.Trim()));
     }
 
-    private void Remember(string? text)
+    private async void Remember(string? text)
     {
         if (!string.IsNullOrWhiteSpace(text))
         {
-            _searchHistory.Add(text);
+            try { await _searchHistory.Add(text); } catch (Exception ex) { Diag.Log($"search history: {ex.Message}"); }
         }
     }
 
@@ -298,12 +371,11 @@ public sealed partial class MainWindow : Window,
         AccountFlyout.Hide();
         try
         {
-            await App.Services.GetRequiredService<ICoreClient>().LogoutAsync();
+            await App.Services.GetRequiredService<SessionService>().LogoutAsync();
         }
         catch
         {
         }
-        App.Services.GetRequiredService<SessionService>().Clear();
         WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
     }
 

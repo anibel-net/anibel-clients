@@ -1,0 +1,23 @@
+<UserControl x:Class="Anibel.App.Views.ProfileEditView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer MaxHeight="560">
+        <StackPanel Spacing="14" MinWidth="280">
+            <Image x:Name="WallpaperPreview" Height="100" Stretch="UniformToFill" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Змяніць фон" Tag="wallpaper" Click="OnPickImageClick" />
+                <Button Content="Выдаліць фон" Tag="wallpaper" Click="OnRemoveImageClick" />
+            </StackPanel>
+            <PersonPicture x:Name="AvatarPreview" Width="72" Height="72" HorizontalAlignment="Left" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Змяніць аватар" Tag="avatar" Click="OnPickImageClick" />
+                <Button Content="Выдаліць аватар" Tag="avatar" Click="OnRemoveImageClick" />
+            </StackPanel>
+            <TextBlock Text="PNG, JPEG, GIF, WebP · да 10 МіБ" FontSize="12" Opacity="0.65" />
+            <TextBox x:Name="DisplayNameBox" Header="Імя" MaxLength="100" />
+            <TextBox x:Name="BioBox" Header="Пра сябе" MaxLength="2000" AcceptsReturn="True"
+                     TextWrapping="Wrap" MinHeight="90" MaxHeight="180" />
+            <InfoBar x:Name="ErrorBar" Severity="Error" IsClosable="False" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -3,18 +3,22 @@ query CommentsQuery($mediaType: MediaTypes!, $mediaId: String!, $limit: Int!, $o
     docs {
       id
       content
-      user {
-        username
-        avatar
-        displayName
-      }
-      date {
-        created
-        updated
-      }
-      related {
-        mediaType
-        mediaId
+      user { username avatar displayName }
+      date { created updated }
+      related { mediaType mediaId }
+      replies {
+        id
+        content
+        user { username avatar displayName }
+        date { created updated }
+        related { mediaType mediaId }
+        replies {
+          id
+          content
+          user { username avatar displayName }
+          date { created updated }
+          related { mediaType mediaId }
+        }
       }
     }
     totalDocs

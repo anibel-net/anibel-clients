@@ -1,119 +1,82 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
+using Anibel.App.Core;
 
 namespace Anibel.App.Services;
 
-/// <summary>
-/// Session persistence: JWT token sealed with DPAPI (token.bin), cached
-/// profile in %LocalAppData%\Anibel\session.json. The plaintext token is
-/// NEVER written to session.json — that would defeat DPAPI entirely.
-/// Core itself never persists tokens.
-/// </summary>
-public sealed class SessionService
+public sealed record SessionSnapshot(ulong Revision, bool Authenticated, string? Username, string? UserId, string? Avatar);
+
+/// <summary>Core session projection plus Windows protected credential storage.</summary>
+public sealed class SessionService(ICoreClient core, ICredentialStore credentials)
 {
-    private record Session(string? Username, string? UserId, string? Avatar);
+    private readonly SemaphoreSlim _operations = new(1, 1);
+    private SessionSnapshot _snapshot = new(0, false, null, null, null);
+    public ulong Revision => _snapshot.Revision;
+    public bool HasSession => _snapshot.Authenticated;
+    public string? Username => _snapshot.Username;
+    public string? UserId => _snapshot.UserId;
+    public string? Avatar => _snapshot.Avatar;
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private readonly string _sessionPath;
-    private readonly string _tokenPath;
-    private string? _token;
-    private bool _tokenLoaded;
-
-    public SessionService()
+    public async Task RestoreAsync()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Anibel");
-        Directory.CreateDirectory(dir);
-        _sessionPath = Path.Combine(dir, "session.json");
-        _tokenPath = Path.Combine(dir, "token.bin");
-        SanitizeLegacySessionFile();
-    }
-
-    /// <summary>Older builds stored the raw token in session.json — strip it.</summary>
-    private void SanitizeLegacySessionFile()
-    {
+        await _operations.WaitAsync();
         try
         {
-            if (!File.Exists(_sessionPath))
-                return;
-            using var doc = JsonDocument.Parse(File.ReadAllText(_sessionPath));
-            if (!doc.RootElement.TryGetProperty("token", out _))
-                return;
-            var session = JsonSerializer.Deserialize<Session>(doc.RootElement.GetRawText(), Json);
-            File.WriteAllText(_sessionPath, JsonSerializer.Serialize(session, Json));
+            var user = await credentials.ReadAsync();
+            if (user is not null)
+                await core.CallAsync<JsonElement>("setToken", new
+                {
+                    token = user.Token,
+                    username = user.Username,
+                    id = user.Id,
+                    avatar = user.Avatar
+                });
+            await RefreshLockedAsync();
         }
-        catch (JsonException)
-        {
-        }
+        finally { _operations.Release(); }
     }
-
-    public bool HasSession => Token is { Length: > 0 };
-
-    public string? Token
+    public async Task LoginAsync(string username, string password)
     {
-        get
+        await _operations.WaitAsync();
+        try
         {
-            LoadTokenOnce();
-            return _token;
+            var user = await core.LoginAsync(username, password);
+            try
+            {
+                await credentials.WriteAsync(user);
+            }
+            finally { await RefreshLockedAsync(); }
         }
+        finally { _operations.Release(); }
     }
-
-    private void LoadTokenOnce()
+    public async Task LogoutAsync()
     {
-        if (_tokenLoaded)
+        await _operations.WaitAsync();
+        try
+        {
+            await core.LogoutAsync();
+            await RefreshLockedAsync();
+        }
+        finally { _operations.Release(); }
+    }
+    public async Task RefreshAsync()
+    {
+        await _operations.WaitAsync();
+        try
+        {
+            await RefreshLockedAsync();
+        }
+        finally { _operations.Release(); }
+    }
+    private async Task RefreshLockedAsync()
+    {
+        var current = await core.CallAsync<SessionSnapshot>("session");
+        if (current.Revision < _snapshot.Revision)
             return;
-        _tokenLoaded = true;
-        _token = File.Exists(_tokenPath) ? Unprotect(File.ReadAllBytes(_tokenPath)) : null;
+        _snapshot = current;
+        if (!current.Authenticated)
+            await credentials.ClearAsync();
+        else if (await credentials.ReadAsync() is { } stored && stored.Id == current.UserId
+            && (stored.Avatar != current.Avatar || stored.Username != current.Username))
+            await credentials.WriteAsync(stored with { Avatar = current.Avatar, Username = current.Username ?? stored.Username });
     }
-
-    public string? Username => ReadSession()?.Username;
-
-    public string? UserId => ReadSession()?.UserId;
-
-    public string? Avatar => ReadSession()?.Avatar;
-
-    public void Save(string username, string userId, string? avatar, string token)
-    {
-        File.WriteAllBytes(_tokenPath, Protect(token));
-        File.WriteAllText(_sessionPath, JsonSerializer.Serialize(
-            new Session(username, userId, avatar), Json));
-        InvalidateTokenCache();
-    }
-
-    public void Clear()
-    {
-        if (File.Exists(_tokenPath))
-            File.Delete(_tokenPath);
-        if (File.Exists(_sessionPath))
-            File.Delete(_sessionPath);
-        InvalidateTokenCache();
-    }
-
-    private void InvalidateTokenCache()
-    {
-        _token = null;
-        _tokenLoaded = false;
-    }
-
-    private Session? ReadSession()
-    {
-        if (!File.Exists(_sessionPath))
-            return null;
-        try
-        {
-            return JsonSerializer.Deserialize<Session>(File.ReadAllText(_sessionPath), Json);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static byte[] Protect(string value) =>
-        ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser);
-
-    private static string Unprotect(byte[] value) =>
-        Encoding.UTF8.GetString(ProtectedData.Unprotect(value, null, DataProtectionScope.CurrentUser));
 }

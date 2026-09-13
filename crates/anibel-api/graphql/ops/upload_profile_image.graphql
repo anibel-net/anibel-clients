@@ -1,0 +1,3 @@
+mutation UploadProfileImage($file: Upload!, $type: UploadType!) {
+  upload(file: $file, type: $type) { path }
+}

@@ -24,7 +24,7 @@ public sealed class FilterOption
 public partial class CatalogViewModel : ObservableObject
 {
     private readonly ICoreClient _core;
-    private int _offset;
+    private long _offset;
     private long _total;
     private int _generation;
     private bool _suppressFilter;
@@ -265,7 +265,7 @@ public partial class CatalogViewModel : ObservableObject
 
     public async Task ForceRefreshAsync()
     {
-        using var _ = ApiCache.Bypass();
+        using var _ = CoreRequestScope.Reload();
         BeginImmediateReset();
         await FetchPageAsync(_generation, reset: true);
     }
@@ -284,7 +284,7 @@ public partial class CatalogViewModel : ObservableObject
             {
                 return;
             }
-            _offset = offsetUsed + page.Docs.Length;
+            _offset = page.NextOffset;
             _total = page.TotalDocs;
             if (reset)
             {
@@ -294,7 +294,7 @@ public partial class CatalogViewModel : ObservableObject
             {
                 Items.AppendRange(page.Docs);
             }
-            HasMore = _total > Items.Count && page.Docs.Length > 0;
+            HasMore = page.HasMore;
             Items.HasMoreItems = HasMore;
             Stats = Strings.Total(_total);
             EmptyHint = Strings.NothingFoundHint;

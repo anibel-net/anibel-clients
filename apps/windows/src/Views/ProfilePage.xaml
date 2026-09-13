@@ -8,6 +8,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
     <Grid>
+        <ProgressRing x:Name="ProfileLoading" IsActive="False" Width="40" Height="40" Visibility="Collapsed" Canvas.ZIndex="4" />
+        <InfoBar x:Name="ProfileError" IsClosable="False" Severity="Error" VerticalAlignment="Top" Canvas.ZIndex="5" />
         <Grid x:Name="LoginHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <Border MaxWidth="480" MinWidth="0" Padding="24,20"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -56,26 +58,29 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border Padding="16" CornerRadius="8"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <PersonPicture x:Name="Avatar" Width="72" Height="72" DisplayName="Профіль" />
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                        <TextBlock x:Name="HelloText" Style="{StaticResource SubtitleTextBlockStyle}" />
-                        <TextBlock Text="Anibel.Net"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                    <Button Grid.Column="2" Content="Выйсці" Click="OnLogoutClick"
-                            VerticalAlignment="Center" />
-                </Grid>
+            <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel>
+                    <Image x:Name="Wallpaper" Height="150" Stretch="UniformToFill" HorizontalAlignment="Stretch" />
+                    <Grid ColumnSpacing="16" Padding="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <PersonPicture x:Name="Avatar" Width="80" Height="80" VerticalAlignment="Top" />
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock x:Name="HelloText" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock x:Name="HandleText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <ScrollViewer MaxHeight="150">
+                                <TextBlock x:Name="BioText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            </ScrollViewer>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" x:Name="OwnActions" Spacing="8">
+                            <Button Content="Рэдагаваць профіль" Click="OnEditProfileClick" />
+                            <Button Content="Выйсці" Click="OnLogoutClick" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
             </Border>
 
             <SelectorBar x:Name="ProfileBar" Grid.Row="1" SelectionChanged="OnProfileBarChanged">
@@ -87,7 +92,7 @@
                 <SelectorBarItem Text="Кінуў" Tag="dropped" />
             </SelectorBar>
 
-            <Grid Grid.Row="2">
+            <Grid x:Name="PersonalContent" Grid.Row="2">
                 <ScrollViewer x:Name="HubPanel">
                     <local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8" Margin="0,4,0,16">
                         <Button Tag="favorites" Click="OnHubCardClick"

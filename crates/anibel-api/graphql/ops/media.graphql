@@ -71,6 +71,7 @@ fragment MediaFields on Media {
   hidden
   dmca
   rating
+  iRated
   markStats {
     total
     watching

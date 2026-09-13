@@ -56,21 +56,13 @@ public sealed partial class DownloadsPage : Page
                 item.Title,
                 item.Subtitle,
                 item.ChapterId,
-                chapters,
-                item.ImagePaths)));
+                chapters)));
             return;
         }
 
-        var media = item.HasVideo ? item.VideoPath : item.AudioPath;
         WeakReferenceMessenger.Default.Send(new PlayEpisodeMessage(new PlayerArgs(
-            item.EpisodeUrl ?? "",
-            item.Title,
-            item.Subtitle,
-            item.EpisodeId,
-            media,
-            item.SubtitlePaths,
-            item.FontPaths,
-            item.EpisodeType)));
+            item.Slug, item.MediaType, "", item.Title, item.Subtitle, item.EpisodeId,
+            DownloadId: item.Id, EpisodeType: item.EpisodeType)));
     }
 
     private async void OnSaveClick(object sender, RoutedEventArgs e)
@@ -81,81 +73,40 @@ public sealed partial class DownloadsPage : Page
         }
         try
         {
-            if (item.Kind == DownloadKind.Manga)
-            {
-                var picker = new FolderPicker();
-                InitPicker(picker);
-                picker.SuggestedStartLocation = PickerLocationId.Downloads;
-                picker.FileTypeFilter.Add("*");
-                var folder = await picker.PickSingleFolderAsync();
-                if (folder is null)
-                {
-                    return;
-                }
-                await Vm.CopyToFolderAsync(item, folder.Path);
-                return;
-            }
-
-            var src = item.Kind == DownloadKind.Audio
-                ? item.AudioPath ?? item.VideoPath ?? item.FilePath
-                : item.VideoPath ?? item.AudioPath ?? item.FilePath;
-            if (src is null || !File.Exists(src))
-            {
-                return;
-            }
-            var pickerFile = new FileSavePicker();
-            InitPicker(pickerFile);
-            pickerFile.SuggestedStartLocation = PickerLocationId.Downloads;
-            var ext = Path.GetExtension(src);
-            if (string.IsNullOrEmpty(ext))
-            {
-                ext = ".bin";
-            }
-            pickerFile.FileTypeChoices.Add(Strings.MediaFileType, [ext]);
-            pickerFile.SuggestedFileName = SanitizeFile($"{item.Title} - {item.Subtitle}");
-            var file = await pickerFile.PickSaveFileAsync();
-            if (file is null)
-            {
-                return;
-            }
-            File.Copy(src, file.Path, overwrite: true);
-            var destDir = Path.GetDirectoryName(file.Path);
-            if (destDir is not null)
-            {
-                var stem = Path.GetFileNameWithoutExtension(file.Path);
-                foreach (var sub in item.SubtitlePaths.Where(File.Exists))
-                {
-                    File.Copy(sub, Path.Combine(destDir, stem + Path.GetExtension(sub)), overwrite: true);
-                }
-            }
+            var picker = new FolderPicker();
+            InitPicker(picker);
+            picker.SuggestedStartLocation = PickerLocationId.Downloads;
+            picker.FileTypeFilter.Add("*");
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is not null) await Vm.CopyToFolderAsync(item, folder.Path);
         }
         catch (Exception ex)
         {
-            Diag.Log($"save download: {ex.Message}");
+            await ShowErrorAsync(ex);
         }
     }
 
-    private void OnCancelClick(object sender, RoutedEventArgs e)
+    private async void OnCancelClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: DownloadItem item })
         {
-            Vm.Cancel(item);
+            try { await Vm.Cancel(item); } catch (Exception ex) { await ShowErrorAsync(ex); }
         }
     }
 
-    private void OnRetryClick(object sender, RoutedEventArgs e)
+    private async void OnRetryClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: DownloadItem item })
         {
-            Vm.Retry(item);
+            try { await Vm.Retry(item); } catch (Exception ex) { await ShowErrorAsync(ex); }
         }
     }
 
-    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    private async void OnDeleteClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: DownloadItem item })
         {
-            Vm.Delete(item);
+            try { await Vm.Delete(item); } catch (Exception ex) { await ShowErrorAsync(ex); }
         }
     }
 
@@ -171,7 +122,6 @@ public sealed partial class DownloadsPage : Page
     {
         try
         {
-            Directory.CreateDirectory(Vm.Root);
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
@@ -195,13 +145,9 @@ public sealed partial class DownloadsPage : Page
         InitializeWithWindow.Initialize(picker, hwnd);
     }
 
-    private static string SanitizeFile(string name)
+    private async Task ShowErrorAsync(Exception ex)
     {
-        foreach (var c in Path.GetInvalidFileNameChars())
-        {
-            name = name.Replace(c, '_');
-        }
-        name = name.Trim().Trim('.');
-        return name.Length == 0 ? "anibel" : name.Length > 80 ? name[..80] : name;
+        var dialog = new ContentDialog { Title = Strings.Sorry, Content = Ui.DisplayMessage(ex), CloseButtonText = Strings.Ok, XamlRoot = XamlRoot };
+        await dialog.ShowAsync();
     }
 }

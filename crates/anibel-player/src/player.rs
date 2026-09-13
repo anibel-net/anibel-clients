@@ -54,12 +54,21 @@ pub struct FontAsset {
     pub url: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackKind {
+    Native,
+    Embed,
+    #[default]
+    PendingNative,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackIntent {
     /// `embed` — external iframe (Google Drive) — WebView2 pipeline
     /// `native` — Anibel-hosted HLS/DASH + ASS subtitles — mpv/libass pipeline
-    pub kind: String,
+    pub kind: PlaybackKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub page_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,14 +92,14 @@ pub struct PlaybackIntent {
 impl PlaybackIntent {
     pub fn embed(url: &str) -> Self {
         PlaybackIntent {
-            kind: "embed".into(),
+            kind: PlaybackKind::Embed,
             page_url: Some(url.to_string()),
             ..Default::default()
         }
     }
 
     pub fn is_native(&self) -> bool {
-        self.kind == "native" && self.video_src.is_some()
+        self.kind == PlaybackKind::Native && self.video_src.is_some()
     }
 }
 
@@ -109,7 +118,7 @@ pub fn classify(ep: &Episode) -> PlaybackIntent {
         PlaybackIntent::embed(&url)
     } else {
         PlaybackIntent {
-            kind: "pendingNative".into(),
+            kind: PlaybackKind::PendingNative,
             page_url: Some(url),
             ..Default::default()
         }
@@ -189,7 +198,7 @@ pub async fn resolve_intent(
     let sub_src = subtitles.first().map(|t| t.url.clone());
 
     Ok(PlaybackIntent {
-        kind: "native".into(),
+        kind: PlaybackKind::Native,
         page_url: page_url.map(str::to_string),
         video_id: Some(video_id),
         video_src: Some(video_src),
@@ -239,7 +248,7 @@ mod tests {
             url: Some("https://drive.google.com/file/d/abc/preview".into()),
             ..Default::default()
         };
-        assert_eq!(classify(&ep).kind, "embed");
+        assert_eq!(classify(&ep).kind, PlaybackKind::Embed);
     }
 
     #[test]
@@ -250,7 +259,7 @@ mod tests {
             ),
             ..Default::default()
         };
-        assert_eq!(classify(&ep).kind, "pendingNative");
+        assert_eq!(classify(&ep).kind, PlaybackKind::PendingNative);
         assert!(extract_video_id(ep.url.as_deref().unwrap()).is_some());
     }
 
@@ -293,7 +302,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(intent.kind, "native");
+        assert_eq!(intent.kind, PlaybackKind::Native);
         assert_eq!(
             intent.video_src.as_deref(),
             Some("https://n3.anibel.stream/dash/8c52d132/manifest.m3u8")

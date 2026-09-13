@@ -16,14 +16,6 @@
         <local:BoolToVisibilityConverter x:Key="BoolVis" />
         <conv:SlideTitleConverter x:Key="SlideTitle" />
         <conv:SlideContentConverter x:Key="SlideContent" />
-        <Style x:Key="HeroNavButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
-            <Setter Property="Width" Value="36" />
-            <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="18" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Background" Value="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
-        </Style>
     </Page.Resources>
 
     <Grid x:Name="Root" Padding="16,8,16,0" RowSpacing="12">
@@ -69,7 +61,6 @@
                     BorderThickness="1"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     UseSystemFocusVisuals="True"
-                    Loaded="OnHeroCarouselLoaded"
                     ItemsSource="{x:Bind Vm.Slides, Mode=OneWay}"
                     SelectionChanged="OnHeroSelectionChanged">
                     <FlipView.ItemContainerStyle>
@@ -113,16 +104,6 @@
                         </DataTemplate>
                     </FlipView.ItemTemplate>
                 </FlipView>
-                <Button x:Name="HeroPrev" Style="{StaticResource HeroNavButton}"
-                        HorizontalAlignment="Left" Margin="12,0,0,0"
-                        Click="OnHeroPrev" ToolTipService.ToolTip="Папярэдні">
-                    <FontIcon Glyph="&#xE76B;" FontSize="14" />
-                </Button>
-                <Button x:Name="HeroNext" Style="{StaticResource HeroNavButton}"
-                        HorizontalAlignment="Right" Margin="0,0,12,0"
-                        Click="OnHeroNext" ToolTipService.ToolTip="Наступны">
-                    <FontIcon Glyph="&#xE76C;" FontSize="14" />
-                </Button>
             </Grid>
             <PipsPager
                 x:Name="HeroPips"

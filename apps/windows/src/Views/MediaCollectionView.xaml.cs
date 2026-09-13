@@ -49,6 +49,7 @@ public sealed partial class MediaCollectionView : UserControl
             RelayoutGrid();
         };
         ListHost.Loaded += (_, _) => AttachScrollViewer();
+        ListHost.KeyDown += OnListKeyDown;
         GridScroll.SizeChanged += OnGridSizeChanged;
         ListHost.SizeChanged += (_, _) => CheckNeedMore();
         var placeholders = new int[12];
@@ -68,10 +69,7 @@ public sealed partial class MediaCollectionView : UserControl
         }
         var item = ItemAt(sender.ItemsSource, args.Index);
         fe.DataContext = item;
-        if (fe.Tag is null)
-        {
-            fe.Tag = item;
-        }
+        fe.Tag = item;
     }
 
     private static object? ItemAt(object? source, int index)
@@ -167,6 +165,7 @@ public sealed partial class MediaCollectionView : UserControl
         var view = (MediaCollectionView)d;
         var show = e.NewValue is true;
         view.SkeletonHost.Visibility = show && view.IsGridMode ? Visibility.Visible : Visibility.Collapsed;
+        view.GridScroll.IsEnabled = view.ListHost.IsEnabled = !show;
         view.GridScroll.Opacity = show ? 0 : 1;
         view.ListHost.Opacity = show ? 0 : 1;
         if (show)
@@ -334,7 +333,55 @@ public sealed partial class MediaCollectionView : UserControl
         }
     }
 
-    private void OnGridCardTapped(object sender, TappedRoutedEventArgs e)
+    public bool FocusFirstCard()
+    {
+        if (!IsGridMode) return FocusListCard(0);
+        return FocusCard(0);
+    }
+
+    private bool FocusListCard(int index)
+    {
+        if (ListHost.Items.Count == 0) return false;
+        index = Math.Clamp(index, 0, ListHost.Items.Count - 1);
+        ListHost.ScrollIntoView(ListHost.Items[index]);
+        ListHost.UpdateLayout();
+        return ListHost.ContainerFromIndex(index) is Control card && card.Focus(FocusState.Keyboard);
+    }
+
+    private void OnListKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is not (Windows.System.VirtualKey.J or Windows.System.VirtualKey.K)
+            || Services.KeyboardNavigation.Modifiers != Windows.System.VirtualKeyModifiers.None) return;
+        var node = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        while (node is not null && node is not ListViewItem) node = VisualTreeHelper.GetParent(node);
+        if (node is not ListViewItem item) return;
+        var next = GridKeyboard.Target(ListHost.IndexFromContainer(item), ListHost.Items.Count, 1, e.Key);
+        if (next is { } index) { FocusListCard(index); e.Handled = true; }
+    }
+
+    private bool FocusCard(int index)
+    {
+        if (GridRepeater.ItemsSourceView is not { Count: > 0 } items) return false;
+        index = Math.Clamp(index, 0, items.Count - 1);
+        if (GridRepeater.GetOrCreateElement(index) is not Control card) return false;
+        GridRepeater.UpdateLayout();
+        card.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        return card.Focus(FocusState.Keyboard);
+    }
+
+    private void OnGridCardKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not UIElement element || Services.KeyboardNavigation.Modifiers != Windows.System.VirtualKeyModifiers.None) return;
+        var index = GridRepeater.GetElementIndex(element);
+        var count = GridRepeater.ItemsSourceView?.Count ?? 0;
+        var columns = PosterGridLayout.ForViewport(Math.Max(1, _lastGridWidth)).Columns;
+        var next = GridKeyboard.Target(index, count, columns, e.Key);
+        if (next is null) return;
+        FocusCard(next.Value);
+        e.Handled = true;
+    }
+
+    private void OnGridCardClick(object sender, RoutedEventArgs e)
     {
         // ItemsRepeater does not set DataContext; the card is on Tag via x:Bind.
         var card = (sender as FrameworkElement)?.Tag as MediaCard
@@ -344,6 +391,5 @@ public sealed partial class MediaCollectionView : UserControl
             return;
         }
         MediaClick?.Invoke(this, card);
-        e.Handled = true;
     }
 }

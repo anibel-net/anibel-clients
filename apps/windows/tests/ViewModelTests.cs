@@ -16,7 +16,7 @@ public class HomeViewModelTests
         var core = new FakeCoreClient
         {
             Slides = [new SlideDto { Id = "s1", Img = "https://cdn.example/s.jpg" }],
-            Updates = [new MediaCard { Slug = "u1", MediaType = "anime" }],
+            UpdatesPage = new([new MediaCard { Slug = "u1", MediaType = "anime" }],1,false),
         };
         var vm = new HomeViewModel(core);
         await vm.LoadAsync();
@@ -24,7 +24,7 @@ public class HomeViewModelTests
         Assert.True(vm.HasSlides);
         Assert.Single(vm.Slides);
         Assert.Single(vm.Updates);
-        Assert.Equal("ALL", core.LastUpdatesType);
+        Assert.Equal("ALL", core.Calls.Last(c => c.Op == "updatesPage").Args.GetProperty("type").GetString());
         Assert.Null(vm.StatusMessage);
     }
 
@@ -33,12 +33,12 @@ public class HomeViewModelTests
     {
         var core = new FakeCoreClient
         {
-            Updates = [new MediaCard { Slug = "m1", MediaType = "manga" }],
+            UpdatesPage = new([new MediaCard { Slug = "m1", MediaType = "manga" }],1,false),
         };
         var vm = new HomeViewModel(core);
         await vm.LoadAsync();
         await vm.SetUpdateTypeAsync("MANGA");
-        Assert.Equal("MANGA", core.LastUpdatesType);
+        Assert.Equal("MANGA", core.Calls.Last(c => c.Op == "updatesPage").Args.GetProperty("type").GetString());
         Assert.Equal("MANGA", vm.UpdateType);
         Assert.Single(vm.Updates);
     }
@@ -127,38 +127,6 @@ public class QuickSearchTests
     }
 }
 
-public class SearchHistoryTests
-{
-    [Fact]
-    public void Add_moves_to_front_and_caps()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"anibel-hist-{Guid.NewGuid():N}.json");
-        try
-        {
-            var history = new SearchHistory(path);
-            history.Add("clash");
-            history.Add("netflix");
-            history.Add("clash");
-            Assert.Equal(["clash", "netflix"], history.Items);
-            for (var i = 0; i < SearchHistory.MaxItems + 3; i++)
-            {
-                history.Add($"q{i}");
-            }
-            Assert.Equal(SearchHistory.MaxItems, history.Items.Count);
-            Assert.Equal("q10", history.Items[0]);
-            history.Remove("q10");
-            Assert.DoesNotContain("q10", history.Items);
-        }
-        finally
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-    }
-}
-
 public class SearchViewModelTests
 {
     [Fact]
@@ -209,7 +177,7 @@ public class CatalogViewModelTests
         {
             Filters = new AnibelFiltersDto([2024, 2023], ["драма"], ["studio"]),
             MediaList = new PaginationDto<MediaCard>(
-                [new MediaCard { Slug = "a", MediaType = "anime" }], 12, 60, 0),
+                [new MediaCard { Slug = "a", MediaType = "anime" }], 12, 60, 0, 1, true),
         };
         var vm = new CatalogViewModel(core);
         await vm.OpenAsync("anime", "Анімэ");
@@ -247,7 +215,7 @@ public class CatalogViewModelTests
         var core = new FakeCoreClient
         {
             MediaList = new PaginationDto<MediaCard>(
-                [new MediaCard { Slug = "a", MediaType = "anime" }], 12, 60, 0),
+                [new MediaCard { Slug = "a", MediaType = "anime" }], 12, 60, 0, 1, true),
         };
         var vm = new CatalogViewModel(core);
         await vm.OpenAsync("anime", "Анімэ");
@@ -288,7 +256,7 @@ public class CatalogViewModelTests
         var core = new FakeCoreClient
         {
             MediaList = new PaginationDto<MediaCard>(
-                [new MediaCard { Slug = "a", MediaType = "anime" }], 120, 60, 0),
+                [new MediaCard { Slug = "a", MediaType = "anime" }], 120, 60, 0, 1, true),
         };
         var vm = new CatalogViewModel(core);
         await vm.OpenAsync("anime", "Анімэ");
@@ -330,7 +298,7 @@ public class MediaDetailsViewModelTests
     [Fact]
     public async Task LoadAsync_missing_title_shows_page_error()
     {
-        var vm = new MediaDetailsViewModel(new FakeCoreClient { Media = null }, new SessionService());
+        var vm = new MediaDetailsViewModel(new FakeCoreClient { Media = null }, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         await vm.LoadAsync("missing", "anime");
         Assert.True(vm.ShowPageError);
         Assert.Equal("Няма такога тайтла.", vm.StatusMessage);
@@ -355,7 +323,7 @@ public class MediaDetailsViewModelTests
                 new EpisodeDto { Id = "e1", Episode = 1, Type = "sub", Resource = 2, Url = "https://video.anibel.net/x" },
             ],
         };
-        var vm = new MediaDetailsViewModel(core, new Anibel.App.Services.SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         await vm.LoadAsync("death-note", "anime");
         Assert.Equal("Сшытак смерці", vm.DisplayTitle);
         Assert.True(vm.ShowEpisodes);
@@ -387,7 +355,7 @@ public class MediaDetailsViewModelTests
                 ],
             },
         };
-        var vm = new MediaDetailsViewModel(core, new Anibel.App.Services.SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         await vm.LoadAsync("death-note", "anime");
         Assert.True(vm.ShowFranchise);
         Assert.Equal("Death Note", vm.FranchiseName);
@@ -411,7 +379,8 @@ public class MediaDetailsViewModelTests
                 Slug = "solo",
             },
         };
-        var vm = new MediaDetailsViewModel(core, new SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
+        core.KindChoice = new("chapters", ["notselected", "reading", "read"]);
         await vm.LoadAsync("solo", "manga");
         Assert.False(vm.ShowFranchise);
         Assert.False(vm.ShowRecommendations);
@@ -420,10 +389,10 @@ public class MediaDetailsViewModelTests
     }
 
     [Fact]
-    public void ApplyEpisodeFilter_empty_playable_does_not_cycle_kind()
+    public async Task Empty_core_episode_choices_hide_kind_bar()
     {
-        var vm = new MediaDetailsViewModel(new FakeCoreClient(), new SessionService());
-        vm.ApplyEpisodeFilter();
+        var vm = new MediaDetailsViewModel(new FakeCoreClient { Media = new MediaDetailDto { MediaId="1",MediaType="anime",Slug="empty" } }, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
+        await vm.LoadAsync("empty", "anime");
         Assert.True(vm.EpisodesEmpty);
         Assert.Equal("dub", vm.SelectedKind);
         Assert.False(vm.ShowKindBar);
@@ -437,7 +406,8 @@ public class MediaDetailsViewModelTests
             Media = new MediaDetailDto { MediaId = "2", MediaType = "manga", Slug = "dallae" },
             Chapters = new PaginationDto<ChapterDto>([new ChapterDto { Id = "c1", Chapter = 1, Title = "Start" }], 1, 500, 0),
         };
-        var vm = new MediaDetailsViewModel(core, new Anibel.App.Services.SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
+        core.KindChoice = new("chapters", ["notselected", "reading", "read"]);
         await vm.LoadAsync("dallae", "manga");
         Assert.True(vm.ShowChapters);
         Assert.False(vm.ShowEpisodes);
@@ -480,7 +450,8 @@ public class MediaDetailsViewModelTests
             },
             Chapters = new PaginationDto<ChapterDto>([new ChapterDto { Id = "c1", Chapter = 1 }], 1, 500, 0),
         };
-        var vm = new MediaDetailsViewModel(core, new Anibel.App.Services.SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
+        core.KindChoice = new("book", ["notselected", "reading", "read"]);
         await vm.LoadAsync("novel", "books");
         Assert.True(vm.ShowBookInfo);
         Assert.False(vm.ShowChapters);
@@ -504,7 +475,8 @@ public class MediaDetailsViewModelTests
                 Instructions = new DescriptionDto { Be = "Распакуйце архіў" },
             },
         };
-        var vm = new MediaDetailsViewModel(core, new Anibel.App.Services.SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
+        core.KindChoice = new("game", ["notselected", "playing", "played"]);
         await vm.LoadAsync("game", "games");
         Assert.True(vm.ShowGameInfo);
         Assert.False(vm.ShowEpisodes);
@@ -515,34 +487,23 @@ public class MediaDetailsViewModelTests
     }
 
     [Fact]
-    public async Task Episode_kind_tabs_filter_dub_and_sub()
+    public async Task Episode_tabs_show_core_choices_and_send_filter_intent()
     {
-        var core = new FakeCoreClient
-        {
-            Media = new MediaDetailDto { MediaId = "1", MediaType = "anime", Slug = "x" },
-            Episodes =
-            [
-                new EpisodeDto { Id = "s1", Episode = 1, Type = "sub", Resource = 2, Url = "https://a" },
-                new EpisodeDto { Id = "d1", Episode = 1, Type = "dub", Resource = 2, Url = "https://b" },
-                new EpisodeDto { Id = "d2", Episode = 2, Type = "dub", Resource = 2, Url = "https://c" },
-            ],
-        };
-        var vm = new MediaDetailsViewModel(core, new Anibel.App.Services.SessionService());
+        var core = new FakeCoreClient { Media = new MediaDetailDto { MediaId = "1", MediaType = "anime", Slug = "x" },
+            EpisodeChoices = new([new EpisodeDto { Id = "d1" }], ["dub", "sub"], "dub", [2]) };
+        var vm = new MediaDetailsViewModel(core, new SessionService(core, new MemoryCredentialStore()));
         await vm.LoadAsync("x", "anime");
-        Assert.True(vm.ShowKindBar);
-        Assert.True(vm.HasDub);
-        Assert.True(vm.HasSub);
-        Assert.Equal("dub", vm.SelectedKind);
-        Assert.Equal(2, vm.Episodes.Count);
+        Assert.True(vm.ShowKindBar); Assert.Equal("d1", Assert.Single(vm.Episodes).Id);
+        core.EpisodeChoices = new([new EpisodeDto { Id = "s1" }], ["dub", "sub"], "sub", [2]);
         vm.SelectedKind = "sub";
-        Assert.Single(vm.Episodes);
-        Assert.Equal("s1", vm.Episodes[0].Id);
+        Assert.Equal("s1", Assert.Single(vm.Episodes).Id);
+        Assert.Equal("sub", core.Calls.Last(c => c.Op == "episodeChoices").Args.GetProperty("kind").GetString());
     }
 
     [Fact]
     public async Task LoadAsync_null_media_sets_status()
     {
-        var vm = new MediaDetailsViewModel(new FakeCoreClient { Media = null }, new Anibel.App.Services.SessionService());
+        var vm = new MediaDetailsViewModel(new FakeCoreClient { Media = null }, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         await vm.LoadAsync("missing", "anime");
         Assert.NotNull(vm.StatusMessage);
     }
@@ -554,7 +515,7 @@ public class MediaDetailsViewModelTests
         {
             Media = new MediaDetailDto { MediaId = "1", MediaType = "anime", Slug = "x" },
         };
-        var vm = new MediaDetailsViewModel(core, new SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         await vm.LoadAsync("x", "anime");
         Assert.False(await vm.AddCommentAsync("   "));
     }
@@ -562,7 +523,7 @@ public class MediaDetailsViewModelTests
     [Fact]
     public void BeginReply_sets_chip_and_cancel_clears()
     {
-        var vm = new MediaDetailsViewModel(new FakeCoreClient(), new SessionService());
+        var vm = new MediaDetailsViewModel(new FakeCoreClient(), new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         vm.BeginReply(new CommentDto
         {
             Id = "c1",
@@ -580,7 +541,7 @@ public class MediaDetailsViewModelTests
     [Fact]
     public void BeginLoad_clears_reply_target()
     {
-        var vm = new MediaDetailsViewModel(new FakeCoreClient(), new SessionService());
+        var vm = new MediaDetailsViewModel(new FakeCoreClient(), new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         vm.BeginReply(new CommentDto { Id = "c1", User = new CommentUserDto { Username = "bob" } });
         vm.BeginLoad();
         Assert.False(vm.HasReplyTarget);
@@ -593,15 +554,17 @@ public class MediaDetailsViewModelTests
         {
             Media = new MediaDetailDto { MediaId = "1", MediaType = "anime", Slug = "x", Favorite = false },
         };
-        var vm = new MediaDetailsViewModel(core, new SessionService());
+        var vm = new MediaDetailsViewModel(core, new SessionService(new FakeCoreClient(), new MemoryCredentialStore()));
         await vm.LoadAsync("x", "anime");
         Assert.False(vm.IsFavorite);
         Assert.False(vm.Media!.Favorite);
 
+        core.Handler = (op, args, ct) => Task.FromResult<object?>(new MediaDetailsViewModel.SelectionResult(true));
         await vm.SetFavoriteAsync(true);
         Assert.True(vm.IsFavorite);
         Assert.True(vm.Media!.Favorite);
 
+        core.Handler = (op, args, ct) => Task.FromResult<object?>(new MediaDetailsViewModel.SelectionResult(false));
         await vm.SetFavoriteAsync(false);
         Assert.False(vm.IsFavorite);
         Assert.False(vm.Media!.Favorite);
@@ -740,104 +703,5 @@ public class ErrorMappingTests
         var ex = new CoreException("graphql_error", "Invalid credentials");
         Assert.Equal("Invalid credentials", ex.Message);
         Assert.Equal("Няправільны лагін або пароль.", ex.UserMessage);
-    }
-}
-
-public class SubtitlePickerTests
-{
-    [Fact]
-    public void IsSigns_matches_filename_tokens()
-    {
-        Assert.True(SubtitlePicker.IsSigns("https://subtitles.anibel.net/x/signs.ass"));
-        Assert.True(SubtitlePicker.IsSigns(@"C:\subs\hash_надпісы.ass"));
-        Assert.True(SubtitlePicker.IsSigns("ep01.forced.ass"));
-        Assert.True(SubtitlePicker.IsSigns("s&s.ass"));
-        Assert.False(SubtitlePicker.IsSigns("https://subtitles.anibel.net/x/ep13.ass"));
-        Assert.False(SubtitlePicker.IsSigns("design.ass"));
-    }
-
-    [Fact]
-    public void Dub_keeps_only_signs_file()
-    {
-        string[] paths =
-        [
-            @"C:\subs\abc_ep13.ass",
-            @"C:\subs\def_signs.ass",
-        ];
-        var dub = SubtitlePicker.Filter(paths, preferDub: true);
-        Assert.Single(dub);
-        Assert.Contains("signs", dub[0], StringComparison.OrdinalIgnoreCase);
-
-        var sub = SubtitlePicker.Filter(paths, preferDub: false);
-        Assert.Single(sub);
-        Assert.Contains("ep13", sub[0], StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Sub_with_only_signs_keeps_them()
-    {
-        string[] paths = [@"C:\subs\signs.ass"];
-        var kept = SubtitlePicker.Filter(paths, preferDub: false);
-        Assert.Equal(paths, kept);
-    }
-
-    [Fact]
-    public void Dub_without_signs_disables_subs()
-    {
-        Assert.Empty(SubtitlePicker.Filter([@"C:\subs\ep13.ass"], preferDub: true));
-        SubtitleTrackInfo[] tracks = [new(1, "Dialogue", "be", "ep13.ass")];
-        Assert.Null(SubtitlePicker.Pick(tracks, preferDub: true));
-        Assert.Equal(1, SubtitlePicker.Pick(tracks, preferDub: false));
-    }
-
-    [Fact]
-    public void Dub_picks_signs_track_from_list()
-    {
-        SubtitleTrackInfo[] tracks =
-        [
-            new(1, "Belarusian", "be", "ep13.ass"),
-            new(2, "Signs", "be", "signs.ass"),
-        ];
-        Assert.Equal(2, SubtitlePicker.Pick(tracks, preferDub: true));
-        Assert.Equal(1, SubtitlePicker.Pick(tracks, preferDub: false));
-    }
-}
-
-public class AudioTrackPickerTests
-{
-    [Fact]
-    public void Dub_picks_belarusian_lang()
-    {
-        AudioTrackInfo[] tracks =
-        [
-            new(1, "jpn", "Japanese"),
-            new(2, "be", "Belarusian"),
-        ];
-        Assert.Equal(2, AudioTrackPicker.Pick(tracks, preferDub: true));
-        Assert.Equal(1, AudioTrackPicker.Pick(tracks, preferDub: false));
-    }
-
-    [Fact]
-    public void Dub_without_tags_picks_last_track()
-    {
-        AudioTrackInfo[] tracks =
-        [
-            new(1, "", ""),
-            new(2, "", ""),
-        ];
-        Assert.Equal(2, AudioTrackPicker.Pick(tracks, preferDub: true));
-    }
-}
-
-public class ProfileListViewModelTests
-{
-    [Fact]
-    public void Matches_groups_mark_statuses()
-    {
-        Assert.True(ProfileListViewModel.Matches("watching", "inprogress"));
-        Assert.True(ProfileListViewModel.Matches("reading", "inprogress"));
-        Assert.True(ProfileListViewModel.Matches("played", "done"));
-        Assert.True(ProfileListViewModel.Matches("planned", "planned"));
-        Assert.False(ProfileListViewModel.Matches("watching", "dropped"));
     }
 }

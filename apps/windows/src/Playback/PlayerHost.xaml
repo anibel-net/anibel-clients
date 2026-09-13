@@ -32,6 +32,7 @@
 
     <UserControl.KeyboardAccelerators>
         <KeyboardAccelerator Key="Space" Invoked="OnSpaceAccel" />
+        <KeyboardAccelerator Key="K" Invoked="OnSpaceAccel" />
         <KeyboardAccelerator Key="F" Invoked="OnFullscreenAccel" />
         <KeyboardAccelerator Key="M" Invoked="OnMuteAccel" />
         <KeyboardAccelerator Key="Left" Invoked="OnSeekBackAccel" />
@@ -115,11 +116,15 @@
                     <FontIcon Glyph="&#xE89F;" FontSize="16" Foreground="White" />
                 </Button>
                 <TextBlock x:Name="TitleText" Grid.Column="1" Foreground="White" FontSize="15"
-                           FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0"
+                           FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,44,0"
                            TextTrimming="CharacterEllipsis" />
                 <Button Grid.Column="2" Style="{StaticResource MediaBtn}" Click="OnFullscreenClick"
                         ToolTipService.ToolTip="На ўвесь экран">
                     <SymbolIcon x:Name="FullscreenIcon" Symbol="FullScreen" Foreground="White" />
+                </Button>
+                <Button Grid.Column="1" HorizontalAlignment="Right" Style="{StaticResource MediaBtn}" Click="OnQualityClick"
+                        ToolTipService.ToolTip="Якасць відэа" AutomationProperties.Name="Якасць відэа">
+                    <SymbolIcon Symbol="Setting" Foreground="White" />
                 </Button>
                 <Button Grid.Column="3" Style="{StaticResource MediaBtn}" Click="OnCloseClick"
                         ToolTipService.ToolTip="Закрыць">

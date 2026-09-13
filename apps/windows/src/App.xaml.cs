@@ -46,9 +46,9 @@ public partial class App : Application
         var settings = new SettingsService();
         settings.Load(); // persisted language/API endpoints — before anything reads them
         builder.Services.AddSingleton(settings);
-        builder.Services.AddSingleton<ApiCache>();
         builder.Services.AddSingleton<CoreClient>();
         builder.Services.AddSingleton<ICoreClient>(sp => sp.GetRequiredService<CoreClient>());
+        builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
         builder.Services.AddSingleton<SessionService>();
         builder.Services.AddSingleton<SearchHistory>();
         builder.Services.AddSingleton<DownloadService>();
@@ -78,43 +78,34 @@ public partial class App : Application
     /// </summary>
     private async Task BootCoreAsync()
     {
-        await CheckCoreAsync();
-        if (!Services.GetRequiredService<CoreClient>().IsConnected)
+        if (!await CheckCoreAsync())
         {
             return;
         }
-        StartEventPump();
-        RestoreSession();
-    }
-
-    /// <summary>Push the DPAPI-protected token (if any) into the core session.</summary>
-    private async void RestoreSession()
-    {
-        var session = Services.GetRequiredService<SessionService>();
-        if (session.Token is { Length: > 0 } token)
+        try
         {
-            try
-            {
-                await Services.GetRequiredService<CoreClient>().SetTokenAsync(token);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[session] restore failed: {ex.Message}");
-            }
+            await Services.GetRequiredService<SessionService>().RestoreAsync();
+            WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
+            await Services.GetRequiredService<SearchHistory>().RefreshAsync();
         }
+        catch (Exception ex) { await ShowDialogAsync(Strings.CoreErrorTitle, Ui.DisplayMessage(ex)); }
+        StartEventPump();
     }
 
     /// <summary>
     /// Startup health + version check of anibel_core.dll (arch §5.2): surface
     /// a dialog instead of failing later on every op.
     /// </summary>
-    private async Task CheckCoreAsync()
+    private async Task<bool> CheckCoreAsync()
     {
         try
         {
             var core = Services.GetRequiredService<CoreClient>();
             var version = await core.GetVersionAsync();
+            var capabilities = await core.CallAsync<System.Text.Json.JsonElement>("capabilities");
+            if (capabilities.GetProperty("protocolVersion").GetInt32() != 2) throw new InvalidOperationException("Unsupported core protocol. Rebuild the app and core together.");
             Diag.Log($"core ok: {version.Name} {version.Version}");
+            return true;
         }
         catch (Exception ex)
         {
@@ -122,6 +113,7 @@ public partial class App : Application
             await ShowDialogAsync(
                 Strings.CoreErrorTitle,
                 Strings.CoreInitError(ex.Message));
+            return false;
         }
     }
 
@@ -149,32 +141,30 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Polls the core event queue on the UI thread (auth expiry, …). ~60ms is
-    /// enough for our event granularity.
+    /// Reads core snapshots on the UI thread. Events are optional notifications.
     /// </summary>
     private void StartEventPump()
     {
         var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(60);
+        timer.Interval = TimeSpan.FromMilliseconds(500);
         timer.IsRepeating = true;
-        timer.Tick += (_, _) =>
+        var busy = false;
+        timer.Tick += async (_, _) =>
         {
-            var core = Services.GetRequiredService<CoreClient>();
-            foreach (var evt in core.DrainEvents())
+            if (busy) return;
+            busy = true;
+            try
             {
-                if (evt.TryGetProperty("e", out var kind))
-                {
-                    var name = kind.GetString();
-                    System.Diagnostics.Debug.WriteLine($"[core>] {name}");
-                    if (name == "auth.expired")
-                    {
-                        Diag.Log("core: auth.expired — clearing local session");
-                        Services.GetRequiredService<SessionService>().Clear();
-                        WeakReferenceMessenger.Default.Send(new SessionExpiredMessage());
-                        WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
-                    }
-                }
+                var core = Services.GetRequiredService<CoreClient>();
+                _ = core.DrainEvents();
+                var session = Services.GetRequiredService<SessionService>();
+                var revision = session.Revision;
+                await session.RefreshAsync();
+                if (revision != session.Revision) WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
+                await Services.GetRequiredService<DownloadService>().RefreshAsync();
             }
+            catch (Exception ex) { Diag.Log($"core state update: {ex.Message}"); }
+            finally { busy = false; }
         };
         timer.Start();
     }

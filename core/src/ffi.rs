@@ -4,6 +4,8 @@
 //!
 //! ```c
 //! int64_t anibel_core_init(const char* config_json);
+//! int32_t anibel_core_request_begin(int64_t handle, int64_t id);
+//! void    anibel_core_cancel(int64_t handle, int64_t id);
 //! char*   anibel_core_call(int64_t handle, const char* req_json);
 //! char*   anibel_core_events(int64_t handle);   // drained JSON array or "[]"
 //! void    anibel_core_free(char* ptr);
@@ -14,27 +16,20 @@
 //! Response: `{ "id": 1, "ok": true, "value": { … } }`
 //!        or `{ "id": 1, "ok": false, "error": { "code": "…", "message": "…" } }`
 
-use anibel_api::{AnibelApi, media_list_filters_from_json};
+use crate::application::{Application, CacheMode};
 use anibel_domain::error::{AnibelError, ErrorDto};
-use anibel_player::player;
-use anibel_player::video::VideoService;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::collections::VecDeque;
 use std::ffi::{CStr, CString, c_char};
 use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use tokio_util::sync::CancellationToken;
 
 struct CoreState {
-    api: AnibelApi,
-    video: VideoService,
+    application: Arc<Application>,
     runtime: tokio::runtime::Runtime,
-    #[allow(dead_code)] // config surfaced via `config` op later
-    config: Value,
-    /// std Mutex: drained synchronously by the host poll; pushes are quick and
-    /// never cross an await, so blocking is bounded and no events are dropped.
-    events: Mutex<VecDeque<Value>>,
+    requests: Mutex<HashMap<i64, (CancellationToken, bool)>>,
 }
 
 static HANDLES: OnceLock<RwLock<HashMap<i64, Arc<CoreState>>>> = OnceLock::new();
@@ -66,14 +61,6 @@ fn to_json_string<T: Serialize>(value: &T) -> *mut c_char {
     CString::new(serde_json::to_string(value).unwrap_or_else(|_| "{}".into()))
         .map(|s| s.into_raw())
         .unwrap_or(std::ptr::null_mut())
-}
-
-fn push_event(state: &CoreState, event: Value) {
-    let mut e = state
-        .events
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    e.push_back(event);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,18 +97,21 @@ pub unsafe extern "C" fn anibel_core_init(config_json: *const c_char) -> i64 {
         Err(_) => return -1,
     };
 
-    let api = AnibelApi::with_base(base_url.to_string());
     let video_base = config
         .get("videoBaseUrl")
         .and_then(Value::as_str)
         .unwrap_or(anibel_player::video::DEFAULT_VIDEO_API);
-    let video = VideoService::with_base(video_base.to_string());
+    let data_dir = config
+        .get("dataDir")
+        .and_then(Value::as_str)
+        .map(std::path::PathBuf::from);
     let state = Arc::new(CoreState {
-        api,
-        video,
+        requests: Mutex::new(HashMap::new()),
+        application: match Application::new(base_url, video_base, data_dir) {
+            Ok(app) => Arc::new(app),
+            Err(_) => return -1,
+        },
         runtime,
-        config,
-        events: Mutex::new(VecDeque::new()),
     });
 
     let handle = next_handle();
@@ -134,6 +124,41 @@ pub unsafe extern "C" fn anibel_core_init(config_json: *const c_char) -> i64 {
 /// `handle` must come from `anibel_core_init` (a second shutdown is a no-op).
 pub unsafe extern "C" fn anibel_core_shutdown(handle: i64) {
     map_handles().remove(&handle);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn anibel_core_request_begin(handle: i64, id: i64) -> i32 {
+    let states = handles()
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(state) = states.get(&handle) else {
+        return 0;
+    };
+    let mut requests = state
+        .requests
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if requests.len() >= 1024 || requests.contains_key(&id) {
+        return 0;
+    }
+    requests.insert(id, (CancellationToken::new(), false));
+    1
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn anibel_core_cancel(handle: i64, id: i64) {
+    let states = handles()
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(state) = states.get(&handle)
+        && let Some((token, _)) = state
+            .requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&id)
+    {
+        token.cancel();
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -160,12 +185,7 @@ pub unsafe extern "C" fn anibel_core_events(handle: i64) -> *mut c_char {
         None => return to_json_string(&json!([])),
     };
 
-    let events: Vec<Value> = state
-        .events
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .drain(..)
-        .collect();
+    let events = state.application.drain_events();
 
     to_json_string(&events)
 }
@@ -173,351 +193,6 @@ pub unsafe extern "C" fn anibel_core_events(handle: i64) -> *mut c_char {
 // ---------------------------------------------------------------------------
 // op dispatch
 // ---------------------------------------------------------------------------
-
-fn field_str(args: &Value, name: &str) -> Result<String, AnibelError> {
-    args.get(name)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| AnibelError::BadArgs(format!("`{name}` required")))
-}
-
-fn field_str_vec(args: &Value, name: &str) -> Result<Vec<String>, AnibelError> {
-    args.get(name)
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .ok_or_else(|| AnibelError::BadArgs(format!("`{name}` required (string array)")))
-}
-
-fn domain_value<T: Serialize>(v: T) -> Result<Value, AnibelError> {
-    serde_json::to_value(v).map_err(|e| AnibelError::Internal(e.to_string()))
-}
-
-async fn dispatch(state: &CoreState, op: &str, args: &Value) -> Result<Value, AnibelError> {
-    let api = &state.api;
-    match op {
-        "version" => Ok(json!({ "name": "anibel-core", "version": env!("CARGO_PKG_VERSION") })),
-        "health" => Ok(json!({ "status": "ok" })),
-
-        "login" => {
-            let username: String = field_str(args, "username")?;
-            let password: String = field_str(args, "password")?;
-            let user = api.login(&username, &password).await?;
-            domain_value(user)
-        }
-        "logout" => {
-            api.logout().await;
-            Ok(json!({ "status": "ok" }))
-        }
-        "setToken" => {
-            let token: Option<String> =
-                args.get("token").and_then(Value::as_str).map(str::to_owned);
-            api.set_token(token).await;
-            Ok(json!({ "status": "ok" }))
-        }
-        "markAs" => {
-            let media_id: String = field_str(args, "mediaId")?;
-            let media_type: String = field_str(args, "mediaType")?;
-            let status: String = field_str(args, "status")?;
-            api.mark_as(&media_id, &media_type, &status).await?;
-            Ok(json!({ "status": "ok" }))
-        }
-        "removeMark" => {
-            let media_id: String = field_str(args, "mediaId")?;
-            let media_type: String = field_str(args, "mediaType")?;
-            let status: String = field_str(args, "status")?;
-            api.remove_mark(&media_id, &media_type, &status).await?;
-            Ok(json!({ "status": "ok" }))
-        }
-        "addFavorite" => {
-            let media_id: String = field_str(args, "mediaId")?;
-            let media_type: String = field_str(args, "mediaType")?;
-            api.add_favorite(&media_id, &media_type).await?;
-            Ok(json!({ "status": "ok" }))
-        }
-        "removeFavorite" => {
-            let media_id: String = field_str(args, "mediaId")?;
-            let media_type: String = field_str(args, "mediaType")?;
-            api.remove_favorite(&media_id, &media_type).await?;
-            Ok(json!({ "status": "ok" }))
-        }
-        "addHistoryRecord" => {
-            let entity_id: String = field_str(args, "entityId")?;
-            let history_type: String = args
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("episode")
-                .to_string();
-            api.add_history_record(&entity_id, &history_type).await?;
-            Ok(json!({ "status": "ok" }))
-        }
-        "removeHistoryRecord" => {
-            let entity_id: String = field_str(args, "entityId")?;
-            let history_type: String = args
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("episode")
-                .to_string();
-            api.remove_history_record(&entity_id, &history_type).await?;
-            Ok(json!({ "status": "ok" }))
-        }
-        "me" => {
-            // `me` is absent on production schema; user(username) is the fallback.
-            let username = field_str(args, "username")?;
-            let profile = api.user(&username).await?;
-            domain_value(profile)
-        }
-
-        "search" => {
-            let query: String = field_str(args, "query")?;
-            let limit = args.get("limit").and_then(Value::as_i64);
-            let out = api.search(&query, limit.unwrap_or(20)).await?;
-            domain_value(out)
-        }
-        "media" => {
-            let slug: String = field_str(args, "slug")?;
-            let media_type = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
-            let out = api.media(&slug, media_type).await?;
-            domain_value(out)
-        }
-        "mediaList" => {
-            let args = args.clone();
-            let media_type = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("mediaType required".into()))?
-                .to_string();
-            let offset = args.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(20);
-            let filters = args.get("filters").map(media_list_filters_from_json);
-            let out = api.media_list(&media_type, offset, limit, filters).await?;
-            domain_value(out)
-        }
-        "episodes" => {
-            let media_id: String = args
-                .get("mediaId")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("mediaId required".into()))?
-                .to_string();
-            let r#type = args
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("sub")
-                .to_string();
-            let resource = args.get("resource").and_then(Value::as_i64).unwrap_or(1);
-            // null limit => server pagination returns 0 docs; default to site behaviour (100)
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(100);
-            let out = api
-                .episodes(&media_id, &r#type, resource, Some(limit))
-                .await?;
-            domain_value(out)
-        }
-        "episodesMatrix" => {
-            let media_id: String = args
-                .get("mediaId")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("mediaId required".into()))?
-                .to_string();
-            let out = api.episodes_matrix(&media_id).await?;
-            domain_value(out)
-        }
-        "chapters" => {
-            let media_id: String = args
-                .get("mediaId")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("mediaId required".into()))?
-                .to_string();
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(500);
-            let out = api.chapters(&media_id, Some(limit)).await?;
-            domain_value(out)
-        }
-        "chapter" => {
-            let slug: String = args
-                .get("slug")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("slug required".into()))?
-                .to_string();
-            let chapter: f64 = args
-                .get("chapter")
-                .and_then(Value::as_f64)
-                .ok_or_else(|| AnibelError::BadArgs("chapter required".into()))?;
-            let out = api.chapter(&slug, chapter).await?;
-            domain_value(out)
-        }
-        "comments" => {
-            let media_id: String = args
-                .get("mediaId")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("mediaId required".into()))?
-                .to_string();
-            let media_type = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .unwrap_or("anime")
-                .to_string();
-            let offset = args.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(20);
-            let out = api.comments(&media_id, &media_type, offset, limit).await?;
-            domain_value(out)
-        }
-        "addComment" => {
-            let media_id: String = field_str(args, "mediaId")?;
-            let media_type: String = field_str(args, "mediaType")?;
-            let content: String = field_str(args, "content")?;
-            let reply_to = args
-                .get("replyTo")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned);
-            let out = api
-                .add_comment(&media_id, &media_type, &content, reply_to.as_deref())
-                .await?;
-            domain_value(out)
-        }
-        "trends" => {
-            let r#type = args
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("all")
-                .to_string();
-            let date = args
-                .get("date")
-                .and_then(Value::as_str)
-                .unwrap_or("week")
-                .to_string();
-            let limit = args.get("limit").and_then(Value::as_i64);
-            let out = api.trends(&r#type, &date, limit).await?;
-            domain_value(out)
-        }
-        "updates" => {
-            let r#type = args
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("ALL")
-                .to_string();
-            let offset = args.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(20);
-            let out = api.updates(&r#type, offset, limit).await?;
-            domain_value(out)
-        }
-        "recommendations" => {
-            let r#type = args
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("all")
-                .to_string();
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10);
-            let out = api.recommendations(&r#type, limit).await?;
-            domain_value(out)
-        }
-        "schedule" => {
-            let out = api.schedule().await?;
-            domain_value(out)
-        }
-        "slider" => {
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(6);
-            let out = api.slider(limit).await?;
-            domain_value(out)
-        }
-        "filters" => {
-            let media_type = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-            let out = api.filters(media_type).await?;
-            domain_value(out)
-        }
-        "statistics" => {
-            let out = api.statistics().await?;
-            domain_value(out)
-        }
-        "random" => {
-            let out = api.random_media().await?;
-            domain_value(out)
-        }
-        "user" => {
-            let username = field_str(args, "username")?;
-            let out = api.user(&username).await?;
-            domain_value(out)
-        }
-        "favorites" => {
-            let username: String = args
-                .get("username")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("username required".into()))?
-                .to_string();
-            let media_type = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-            let offset = args.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(20);
-            let out = api.favorites(&username, media_type, offset, limit).await?;
-            domain_value(out)
-        }
-        "marks" => {
-            let username: String = args
-                .get("username")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("username required".into()))?
-                .to_string();
-            let media_type = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .map(str::to_string);
-            let offset = args.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(20);
-            let out = api.marks(&username, media_type, offset, limit).await?;
-            domain_value(out)
-        }
-        "status" => {
-            let username: String = args
-                .get("username")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("username required".into()))?
-                .to_string();
-            let media_type: String = args
-                .get("mediaType")
-                .and_then(Value::as_str)
-                .ok_or_else(|| AnibelError::BadArgs("mediaType required".into()))?
-                .to_string();
-            let out = api.status(&username, &media_type).await?;
-            domain_value(out)
-        }
-        "resolveEpisode" => {
-            let intent = player::resolve_intent(&state.video, args).await?;
-            domain_value(intent)
-        }
-        "videoInfo" => {
-            let video_id = field_str(args, "videoId")?;
-            let info = state
-                .video
-                .get(&video_id)
-                .await
-                .map_err(|e| AnibelError::Transport(format!("video service: {e}")))?;
-            domain_value(info)
-        }
-        "fontAssets" => {
-            let names = field_str_vec(args, "names")?;
-            let urls = state
-                .video
-                .fonts_by_names(&names)
-                .await
-                .map_err(|e| AnibelError::Transport(format!("video service: {e}")))?;
-            domain_value(urls)
-        }
-
-        _ => Err(AnibelError::BadArgs(format!("unknown op `{op}`"))),
-    }
-}
 
 #[unsafe(no_mangle)]
 /// # Safety
@@ -553,10 +228,42 @@ pub unsafe extern "C" fn anibel_core_call(handle: i64, req_json: *const c_char) 
         }
     };
 
+    let Some(request_id) = id.as_i64() else {
+        return to_json_string(
+            &json!({"id":id,"ok":false,"error":{"code":"bad_args","message":"request id must be a signed 64-bit integer"}}),
+        );
+    };
+    let token = {
+        let mut requests = state
+            .requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if requests
+            .get(&request_id)
+            .is_some_and(|(_, running)| *running)
+            || requests.len() >= 1024 && !requests.contains_key(&request_id)
+        {
+            return to_json_string(
+                &json!({"id":id,"ok":false,"error":{"code":"bad_args","message":"request id already active or capacity exceeded"}}),
+            );
+        }
+        let (token, running) = requests
+            .entry(request_id)
+            .or_insert_with(|| (CancellationToken::new(), false));
+        *running = true;
+        token.clone()
+    };
     // Panic containment: a Rust panic must never unwind across the C ABI
     // (that aborts the host process). Convert to a machine-readable error.
     let result: Result<Value, AnibelError> = std::panic::catch_unwind(AssertUnwindSafe(|| {
-        state.runtime.block_on(dispatch(&state, op, &args))
+        let mode: CacheMode =
+            serde_json::from_value(request.get("cache").cloned().unwrap_or(json!("default")))
+                .map_err(|_| AnibelError::BadArgs("cache must be default or reload".into()))?;
+        state.runtime.block_on(async {
+            if token.is_cancelled() {return Err(AnibelError::Cancelled);}
+            if crate::application::must_complete(op) {return state.application.call(op,&args,mode).await;}
+            tokio::select! {biased; _=token.cancelled()=>Err(AnibelError::Cancelled), result=state.application.call(op,&args,mode)=>result}
+        })
     }))
     .unwrap_or_else(|payload| {
         let msg = if let Some(s) = payload.downcast_ref::<&str>() {
@@ -569,13 +276,14 @@ pub unsafe extern "C" fn anibel_core_call(handle: i64, req_json: *const c_char) 
         Err(AnibelError::Internal(format!("panic: {msg}")))
     });
 
+    state
+        .requests
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&request_id);
     let response = match result {
         Ok(value) => json!({ "id": id, "ok": true, "value": value }),
         Err(e) => {
-            if matches!(e, AnibelError::Unauthorized) {
-                push_event(&state, json!({ "e": "auth.expired" }));
-            }
-            push_event(&state, json!({ "e": "error", "detail": e.to_dto() }));
             json!({ "id": id, "ok": false, "error": e.to_dto() })
         }
     };
@@ -603,6 +311,143 @@ mod tests {
             anibel_core_free(resp);
         }
         serde_json::from_str(&out).unwrap()
+    }
+
+    #[test]
+    fn cancellation_does_not_drop_an_accepted_mutation() {
+        use std::io::{Read, Write};
+        use std::time::Duration;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (ready_send, ready) = std::sync::mpsc::channel();
+        let (release, release_receive) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 4096];
+            loop {
+                let n = stream.read(&mut buffer).unwrap();
+                assert!(n > 0);
+                request.extend_from_slice(&buffer[..n]);
+                if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let header = String::from_utf8_lossy(&request[..end]).to_lowercase();
+                    let length = header
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length:").map(str::trim))
+                        .unwrap()
+                        .parse::<usize>()
+                        .unwrap();
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            ready_send.send(()).unwrap();
+            release_receive
+                .recv_timeout(Duration::from_secs(3))
+                .unwrap();
+            let body = r#"{"data":{"addFavorite":{"mediaId":"1"}}}"#;
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+        });
+        let config =
+            CString::new(json!({"baseUrl":format!("http://{address}/graphql")}).to_string())
+                .unwrap();
+        let h = unsafe { anibel_core_init(config.as_ptr()) };
+        assert_eq!(anibel_core_request_begin(h, 17), 1);
+        let (result_send, result) = std::sync::mpsc::channel();
+        let caller = std::thread::spawn(move || {
+            result_send.send(call(h,r#"{"id":17,"op":"setFavorite","args":{"mediaId":"1","mediaType":"anime","selected":true}}"#)).unwrap()
+        });
+        ready.recv_timeout(Duration::from_secs(3)).unwrap();
+        anibel_core_cancel(h, 17);
+        assert!(matches!(
+            result.recv_timeout(Duration::from_millis(50)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        release.send(()).unwrap();
+        assert_eq!(
+            result.recv_timeout(Duration::from_secs(3)).unwrap()["ok"],
+            true
+        );
+        caller.join().unwrap();
+        server.join().unwrap();
+        unsafe {
+            anibel_core_shutdown(h);
+        }
+    }
+
+    #[test]
+    fn cancellation_interrupts_an_active_http_request() {
+        let server = httpmock::MockServer::start();
+        server.mock(|w, t| {
+            w.method("POST");
+            t.delay(std::time::Duration::from_secs(5))
+                .json_body(json!({"data":{"search":[]}}));
+        });
+        let config = CString::new(json!({"baseUrl":server.url("/graphql")}).to_string()).unwrap();
+        let h = unsafe { anibel_core_init(config.as_ptr()) };
+        assert_eq!(anibel_core_request_begin(h, 9), 1);
+        let (send, receive) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            send.send(call(h, r#"{"id":9,"op":"search","args":{"query":"test"}}"#))
+                .unwrap();
+        });
+        let start = std::time::Instant::now();
+        loop {
+            let state = handles().read().unwrap().get(&h).unwrap().clone();
+            if state
+                .requests
+                .lock()
+                .unwrap()
+                .get(&9)
+                .is_some_and(|(_, running)| *running)
+            {
+                break;
+            }
+            assert!(start.elapsed() < std::time::Duration::from_secs(2));
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        anibel_core_cancel(h, 9);
+        let result = receive
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(result["error"]["code"], "cancelled");
+        thread.join().unwrap();
+        unsafe {
+            anibel_core_shutdown(h);
+        }
+    }
+
+    #[test]
+    fn cancellation_before_call_is_not_lost_and_reservations_are_released() {
+        let h = init();
+        assert_eq!(anibel_core_request_begin(h, 42), 1);
+        assert_eq!(anibel_core_request_begin(h, 42), 0);
+        anibel_core_cancel(h, 42);
+        let result = call(h, r#"{"id":42,"op":"health"}"#);
+        assert_eq!(result["error"]["code"], "cancelled");
+        assert_eq!(call(h, r#"{"id":42,"op":"health"}"#)["ok"], true);
+        unsafe {
+            anibel_core_shutdown(h);
+        }
+    }
+
+    #[test]
+    fn cache_mode_and_clear_contract() {
+        let h = init();
+        let resp = call(h, r#"{"id": 1, "op": "clearCache", "args": {}}"#);
+        assert_eq!(resp, json!({"id":1,"ok":true,"value":{"status":"ok"}}));
+        let resp = call(h, r#"{"id": 2, "op": "health", "cache": "reload"}"#);
+        assert_eq!(resp["ok"], true);
+        let resp = call(h, r#"{"id": 3, "op": "health", "cache": "unknown"}"#);
+        assert_eq!(resp["error"]["code"], "bad_args");
+        unsafe {
+            anibel_core_shutdown(h);
+        }
     }
 
     #[test]

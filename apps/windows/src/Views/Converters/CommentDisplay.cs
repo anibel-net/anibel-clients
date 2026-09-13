@@ -9,7 +9,7 @@ public static class CommentDisplay
 {
     public static string Username(CommentDto comment) => comment.User?.Username ?? Strings.Anonymous;
     public static string? Avatar(CommentDto comment) => comment.User?.Avatar;
-    public static string DateLabel(CommentDto comment) => comment.Created > 0
+    public static string DateLabel(CommentDto comment) => comment.Created is > 0 and <= 253402300799999
         ? DateTimeOffset.FromUnixTimeMilliseconds(comment.Created).ToLocalTime().ToString("g")
         : "";
 }

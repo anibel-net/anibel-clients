@@ -11,7 +11,8 @@ public partial class MediaDetailsViewModel : ObservableObject
 {
     private readonly ICoreClient _core;
     private readonly SessionService _session;
-    private List<EpisodeDto> _allEpisodes = [];
+    private int _episodeGeneration;
+    private bool _updatingEpisodeChoices;
     private readonly List<long> _resourceValues = [];
     private bool _suppressMarkEvents;
 
@@ -50,55 +51,29 @@ public partial class MediaDetailsViewModel : ObservableObject
     [ObservableProperty] private string languages = "";
     [ObservableProperty] private string chaptersHeader = Strings.Chapters;
     [ObservableProperty] private bool showPersonal;
-    public List<(string Key, string Label)> MarkChoices { get; private set; } = DefaultMarks;
-
-    private static readonly List<(string Key, string Label)> DefaultMarks =
-    [
-        ("notselected", Strings.MarkNotSelected),
-        ("watching", Strings.MarkWatching),
-        ("watched", Strings.MarkWatched),
-        ("dropped", Strings.MarkDropped),
-        ("planned", Strings.MarkPlanned),
-    ];
-
-    private void ApplyKind(string type)
+    public List<(string Key, string Label)> MarkChoices { get; private set; } = [];
+    private async Task ApplyKind(string type)
     {
-        var kind = type.Trim().ToLowerInvariant();
-        ShowEpisodes = kind is "anime" or "cinema";
-        ShowChapters = kind is "manga";
-        ShowGameInfo = kind is "games";
-        ShowBookInfo = kind is "books";
-        ChaptersHeader = Strings.Chapters;
-        MarkChoices = kind switch
-        {
-            "manga" =>
-            [
-                ("notselected", Strings.MarkNotSelected),
-                ("reading", Strings.MarkReading),
-                ("read", Strings.MarkRead),
-                ("dropped", Strings.MarkDropped),
-                ("planned", Strings.MarkPlanned),
-            ],
-            "books" =>
-            [
-                ("notselected", Strings.MarkNotSelected),
-                ("reading", Strings.MarkReading),
-                ("read", Strings.MarkRead),
-                ("dropped", Strings.MarkDropped),
-                ("planned", Strings.MarkPlanned),
-            ],
-            "games" =>
-            [
-                ("notselected", Strings.MarkNotSelected),
-                ("playing", Strings.MarkPlaying),
-                ("played", Strings.MarkPlayed),
-                ("dropped", Strings.MarkDropped),
-                ("planned", Strings.MarkPlanned),
-            ],
-            _ => DefaultMarks,
-        };
+        var kind = await _core.CallAsync<MediaKindDto>("mediaKind", new { mediaType = type });
+        ShowEpisodes = kind.Content == "episodes";
+        ShowChapters = kind.Content == "chapters";
+        ShowGameInfo = kind.Content == "game";
+        ShowBookInfo = kind.Content == "book";
+        MarkChoices = kind.Marks.Select(key => (key, MarkLabel(key))).ToList();
         OnPropertyChanged(nameof(MarkChoices));
     }
+    private static string MarkLabel(string key) => key switch
+    {
+        "watching" => Strings.MarkWatching,
+        "watched" => Strings.MarkWatched,
+        "reading" => Strings.MarkReading,
+        "read" => Strings.MarkRead,
+        "playing" => Strings.MarkPlaying,
+        "played" => Strings.MarkPlayed,
+        "planned" => Strings.MarkPlanned,
+        "dropped" => Strings.MarkDropped,
+        _ => Strings.MarkNotSelected,
+    };
     [ObservableProperty] private bool isFavorite;
     [ObservableProperty] private int markIndex;
     [ObservableProperty] private int selectedResourceIndex;
@@ -115,6 +90,55 @@ public partial class MediaDetailsViewModel : ObservableObject
     [ObservableProperty] private bool chaptersLoading;
     [ObservableProperty] private bool commentsLoading;
     [ObservableProperty] private CommentDto? replyTarget;
+    [ObservableProperty] private bool isPosting;
+    [ObservableProperty] private bool ratingSaving;
+
+    public async Task RefreshPersonalAsync()
+    {
+        if (Media is not { } media) return;
+        media.IRated = null;
+        media.Favorite = null;
+        media.Mark = null;
+        RefreshPersonal();
+        OnPropertyChanged(nameof(Media));
+        if (!_session.HasSession) return;
+        var revision = _session.Revision;
+        try
+        {
+            var refreshed = await _core.MediaAsync(media.Slug, media.MediaType);
+            if (ReferenceEquals(Media, media) && revision == _session.Revision)
+            {
+                media.IRated = refreshed?.IRated;
+                media.Favorite = refreshed?.Favorite;
+                media.Mark = refreshed?.Mark;
+                RefreshPersonal();
+                OnPropertyChanged(nameof(Media));
+            }
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(Media, media) && revision == _session.Revision)
+                StatusMessage = Ui.DisplayMessage(ex);
+        }
+    }
+
+    public async Task SetRatingAsync(int rating)
+    {
+        if (RatingSaving || Media is not { } media) return;
+        if (!_session.HasSession) { StatusMessage = "Увайдзіце, каб паставіць ацэнку"; return; }
+        var revision = _session.Revision;
+        RatingSaving = true;
+        StatusMessage = null;
+        try
+        {
+            await _core.CallAsync<System.Text.Json.JsonElement>("setRating", new { mediaId = media.MediaId, mediaType = media.MediaType, rating });
+            if (revision != _session.Revision) return;
+            media.IRated = rating;
+            if (ReferenceEquals(Media, media)) OnPropertyChanged(nameof(Media));
+        }
+        catch (Exception ex) { if (ReferenceEquals(Media, media)) StatusMessage = Ui.DisplayMessage(ex); }
+        finally { RatingSaving = false; }
+    }
 
     public bool HasStatus => !string.IsNullOrEmpty(StatusMessage);
     public bool ShowPageError => !IsBusy && Media is null && HasStatus;
@@ -151,7 +175,7 @@ public partial class MediaDetailsViewModel : ObservableObject
     {
         IsBusy = true;
         StatusMessage = null;
-        IDisposable? bypass = force ? ApiCache.Bypass() : null;
+        IDisposable? bypass = force ? CoreRequestScope.Reload() : null;
         try
         {
             var loaded = await _core.MediaAsync(slug, mediaType);
@@ -174,7 +198,7 @@ public partial class MediaDetailsViewModel : ObservableObject
             Rating = loaded.Rating is > 0 ? Strings.Rating(loaded.Rating.Value) : "";
             Description = Ui.Text(loaded.Description?.Be, loaded.Description?.Ru) ?? "";
             PosterUrl = loaded.Poster;
-            ApplyKind(loaded.MediaType);
+            await ApplyKind(loaded.MediaType);
             TrailerUrl = string.IsNullOrWhiteSpace(loaded.Trailer) ? null : loaded.Trailer;
             DownloadUrl = string.IsNullOrWhiteSpace(loaded.Download) ? null : loaded.Download;
             Instructions = Ui.Text(loaded.Instructions?.Be, loaded.Instructions?.Ru);
@@ -210,6 +234,7 @@ public partial class MediaDetailsViewModel : ObservableObject
 
     public async Task<bool> AddCommentAsync(string content)
     {
+        if (IsPosting) return false;
         if (Media is null || !_session.HasSession)
         {
             StatusMessage = Strings.LoginToComment;
@@ -220,24 +245,29 @@ public partial class MediaDetailsViewModel : ObservableObject
         {
             return false;
         }
+        var media = Media;
+        var target = ReplyTarget;
+        IsPosting = true;
         try
         {
-            var added = await _core.AddCommentAsync(Media.MediaId, Media.MediaType, text, ReplyTarget?.Id);
-            Comments.Insert(0, added);
-            CommentsEmpty = Comments.Count == 0;
-            CancelReply();
+            await _core.AddCommentAsync(media.MediaId, media.MediaType, text, target?.Id);
+            if (!ReferenceEquals(Media, media)) return true;
+            if (ReferenceEquals(ReplyTarget, target)) CancelReply();
+            // The server owns thread placement. Never insert a reply as a new root.
+            await LoadCommentsAsync(media.MediaId, media.MediaType);
             return true;
         }
         catch (Exception ex)
         {
-            StatusMessage = Ui.DisplayMessage(ex);
+            if (ReferenceEquals(Media, media)) StatusMessage = Ui.DisplayMessage(ex);
             return false;
         }
+        finally { IsPosting = false; }
     }
 
     public void BeginReply(CommentDto comment)
     {
-        if (string.IsNullOrWhiteSpace(comment.Id))
+        if (IsPosting || string.IsNullOrWhiteSpace(comment.Id))
         {
             return;
         }
@@ -263,20 +293,14 @@ public partial class MediaDetailsViewModel : ObservableObject
         }
     }
 
-    public void RefreshPersonalState() => RefreshPersonal();
-
     private void RefreshPersonal()
     {
         ShowPersonal = _session.HasSession && Media is not null;
-        if (!ShowPersonal || Media is null)
-        {
-            return;
-        }
         _suppressMarkEvents = true;
         try
         {
-            IsFavorite = Media.Favorite == true;
-            var mark = Media.Mark?.Status ?? "notselected";
+            IsFavorite = ShowPersonal && Media?.Favorite == true;
+            var mark = ShowPersonal ? Media?.Mark?.Status ?? "notselected" : "notselected";
             MarkIndex = Math.Max(0, MarkChoices.FindIndex(m => m.Key == mark));
         }
         finally
@@ -290,9 +314,7 @@ public partial class MediaDetailsViewModel : ObservableObject
         EpisodesLoading = true;
         try
         {
-            _allEpisodes = await _core.EpisodesMatrixAsync(mediaId);
-            PopulateResources(_allEpisodes);
-            ApplyEpisodeFilter();
+            await UpdateEpisodeChoicesAsync();
         }
         catch (Exception ex)
         {
@@ -335,6 +357,7 @@ public partial class MediaDetailsViewModel : ObservableObject
         try
         {
             var comments = await _core.CommentsAsync(mediaId, mediaType, 0, 30);
+            if (Media?.MediaId != mediaId || Media.MediaType != mediaType) return;
             Comments.Clear();
             foreach (var c in comments.Docs)
             {
@@ -345,7 +368,11 @@ public partial class MediaDetailsViewModel : ObservableObject
         catch (Exception ex)
         {
             Diag.Log($"MediaDetailsViewModel: comments FAILED {ex}");
-            CommentsEmpty = true;
+            if (Media?.MediaId == mediaId && Media.MediaType == mediaType)
+            {
+                CommentsEmpty = Comments.Count == 0;
+                StatusMessage = Ui.DisplayMessage(ex);
+            }
         }
         finally
         {
@@ -353,95 +380,55 @@ public partial class MediaDetailsViewModel : ObservableObject
         }
     }
 
-    private void PopulateResources(List<EpisodeDto> episodes)
+    partial void OnSelectedResourceIndexChanged(int value) { if (!_updatingEpisodeChoices) ApplyEpisodeFilter(); }
+    partial void OnSelectedKindChanged(string value) { if (!_updatingEpisodeChoices) ApplyEpisodeFilter(); }
+    public void ApplyEpisodeFilter() => _ = UpdateEpisodeChoicesAsync();
+    private async Task UpdateEpisodeChoicesAsync()
     {
-        ResourceLabels.Clear();
-        _resourceValues.Clear();
-        ResourceLabels.Add(Strings.AllSources);
-        _resourceValues.Add(0);
-        foreach (var r in episodes.Select(x => x.Resource).Where(r => r is > 0).Select(r => r!.Value).Distinct().OrderBy(r => r))
+        if (Media is null) return;
+        var generation = ++_episodeGeneration;
+        long? resource = SelectedResourceIndex > 0 && SelectedResourceIndex < _resourceValues.Count ? _resourceValues[SelectedResourceIndex] : null;
+        try
         {
-            ResourceLabels.Add(r == 1 ? Strings.ResourceGoogleDrive : Strings.ResourceAnibelPlayer);
-            _resourceValues.Add(r);
-        }
-        SelectedResourceIndex = 0;
-        ShowResourceFilter = _resourceValues.Count > 2;
-    }
-
-    partial void OnSelectedResourceIndexChanged(int value) => ApplyEpisodeFilter();
-    partial void OnSelectedKindChanged(string value) => ApplyEpisodeFilter();
-
-    public void ApplyEpisodeFilter()
-    {
-        var playable = _allEpisodes.Where(x => !string.IsNullOrWhiteSpace(x.Url)).ToList();
-        HasDub = playable.Any(x => IsKind(x, "dub"));
-        HasSub = playable.Any(x => IsKind(x, "sub"));
-        HasOther = playable.Any(x => IsKind(x, "other"));
-        var kindCount = (HasDub ? 1 : 0) + (HasSub ? 1 : 0) + (HasOther ? 1 : 0);
-        ShowKindBar = kindCount > 1;
-
-        var kind = SelectedKind;
-        if (kindCount > 0)
-        {
-            if (kind == "dub" && !HasDub) kind = HasSub ? "sub" : "other";
-            else if (kind == "sub" && !HasSub) kind = HasDub ? "dub" : "other";
-            else if (kind == "other" && !HasOther) kind = HasDub ? "dub" : "sub";
-            if (!string.Equals(kind, SelectedKind, StringComparison.Ordinal))
+            var choices = await _core.CallAsync<EpisodeChoicesDto>("episodeChoices", new { mediaId = Media.MediaId, kind = SelectedKind, resource });
+            if (generation != _episodeGeneration) return;
+            _updatingEpisodeChoices = true;
+            try
             {
-                SelectedKind = kind;
-                return;
+                SelectedKind = choices.SelectedKind;
+                HasDub = choices.Kinds.Contains("dub"); HasSub = choices.Kinds.Contains("sub"); HasOther = choices.Kinds.Contains("other");
+                ShowKindBar = choices.Kinds.Length > 1;
+                ResourceLabels.Clear(); _resourceValues.Clear();
+                ResourceLabels.Add(Strings.AllSources); _resourceValues.Add(0);
+                foreach (var value in choices.Resources)
+                {
+                    _resourceValues.Add(value);
+                    ResourceLabels.Add(value == 1 ? Strings.ResourceGoogleDrive : Strings.ResourceAnibelPlayer);
+                }
+                SelectedResourceIndex = resource is { } selected ? Math.Max(0, _resourceValues.IndexOf(selected)) : 0;
+                ShowResourceFilter = choices.Resources.Length > 1;
+                Episodes.Clear(); foreach (var episode in choices.Items) Episodes.Add(episode);
+                EpisodesEmpty = Episodes.Count == 0;
             }
+            finally { _updatingEpisodeChoices = false; }
         }
-
-        long? resource = SelectedResourceIndex > 0 && SelectedResourceIndex < _resourceValues.Count
-            ? _resourceValues[SelectedResourceIndex]
-            : null;
-        var filtered = playable
-            .Where(x => IsKind(x, kind))
-            .Where(x => !resource.HasValue || x.Resource == resource)
-            .OrderBy(x => x.Episode)
-            .ToList();
-        Episodes.Clear();
-        foreach (var ep in filtered)
-        {
-            Episodes.Add(ep);
-        }
-        EpisodesEmpty = Episodes.Count == 0;
+        catch (Exception ex) { if (generation == _episodeGeneration) StatusMessage = Ui.DisplayMessage(ex); }
     }
 
-    private static bool IsKind(EpisodeDto ep, string kind)
-    {
-        var dub = string.Equals(ep.Type, "dub", StringComparison.OrdinalIgnoreCase);
-        var sub = string.Equals(ep.Type, "sub", StringComparison.OrdinalIgnoreCase);
-        return kind switch
-        {
-            "dub" => dub,
-            "sub" => sub,
-            _ => !dub && !sub,
-        };
-    }
+    public sealed record SelectionResult(bool Selected);
+    public sealed record MarkResult(MarkDto? Mark);
 
     [RelayCommand]
     public async Task SetFavoriteAsync(bool want)
     {
-        if (Media is null)
-        {
-            return;
-        }
+        if (Media is not { } media) return;
+        var revision = _session.Revision;
         try
         {
-            if (want)
-            {
-                await _core.AddFavoriteAsync(Media.MediaId, Media.MediaType);
-            }
-            else
-            {
-                await _core.RemoveFavoriteAsync(Media.MediaId, Media.MediaType);
-            }
-            // Only reflect success — the page rolls the button back via SyncChrome
-            // when the call throws, so a failure never leaves the UI in the new state.
-            Media.Favorite = want;
-            IsFavorite = want;
+            var result = await _core.CallAsync<SelectionResult>("setFavorite", new { mediaId = media.MediaId, mediaType = media.MediaType, selected = want });
+            if (!ReferenceEquals(Media, media) || revision != _session.Revision) return;
+            media.Favorite = result.Selected;
+            IsFavorite = result.Selected;
         }
         catch (Exception ex)
         {
@@ -467,23 +454,13 @@ public partial class MediaDetailsViewModel : ObservableObject
         {
             return;
         }
-        var current = string.IsNullOrWhiteSpace(Media.Mark?.Status) ? "notselected" : Media.Mark!.Status!;
-        if (string.Equals(status, current, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
+        var media = Media;
+        var revision = _session.Revision;
         try
         {
-            if (status == "notselected")
-            {
-                await _core.RemoveMarkAsync(Media.MediaId, Media.MediaType, current);
-                Media.Mark = null;
-            }
-            else
-            {
-                await _core.MarkAsAsync(Media.MediaId, Media.MediaType, status);
-                Media.Mark = new MarkDto { Status = status };
-            }
+            var result = await _core.CallAsync<MarkResult>("setMark", new { mediaId = media.MediaId, mediaType = media.MediaType, status, current = media.Mark?.Status });
+            if (!ReferenceEquals(Media, media) || revision != _session.Revision) return;
+            media.Mark = result.Mark;
         }
         catch (Exception ex)
         {
@@ -497,16 +474,8 @@ public partial class MediaDetailsViewModel : ObservableObject
         if (ep is null || !_session.HasSession) return;
         try
         {
-            if (ep.Watched == true)
-            {
-                await _core.RemoveHistoryRecordAsync(ep.Id);
-                ep.Watched = false;
-            }
-            else
-            {
-                await _core.AddHistoryRecordAsync(ep.Id);
-                ep.Watched = true;
-            }
+            var result = await _core.CallAsync<SelectionResult>("setWatched", new { entityId = ep.Id, selected = ep.Watched != true });
+            ep.Watched = result.Selected;
         }
         catch (Exception ex)
         {

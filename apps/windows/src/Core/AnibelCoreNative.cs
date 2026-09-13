@@ -10,6 +10,12 @@ internal static class AnibelCoreNative
     private const string Dll = "anibel_core.dll";
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int anibel_core_request_begin(long handle, long id);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void anibel_core_cancel(long handle, long id);
+
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
     internal static extern long anibel_core_init([MarshalAs(UnmanagedType.LPUTF8Str)] string configJson);
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]

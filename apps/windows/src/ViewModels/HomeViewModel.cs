@@ -12,7 +12,7 @@ public partial class HomeViewModel : ObservableObject
 
     private readonly ICoreClient _core;
     private bool _loaded;
-    private int _offset;
+    private long _offset;
     private int _generation;
 
     public HomeViewModel(ICoreClient core)
@@ -79,7 +79,7 @@ public partial class HomeViewModel : ObservableObject
 
     public async Task ForceRefreshAsync()
     {
-        using var _ = ApiCache.Bypass();
+        using var _ = CoreRequestScope.Reload();
         _loaded = false;
         Updates.Clear();
         await LoadAsync();
@@ -140,7 +140,7 @@ public partial class HomeViewModel : ObservableObject
         }
         try
         {
-            var page = await _core.UpdatesAsync(UpdateType, _offset, PageSize);
+            var page = await _core.CallAsync<UpdatesPageDto>("updatesPage", new { type = UpdateType, offset = _offset, limit = PageSize });
             if (generation != _generation)
             {
                 return;
@@ -149,12 +149,12 @@ public partial class HomeViewModel : ObservableObject
             {
                 Updates.Clear();
             }
-            foreach (var m in page)
+            foreach (var m in page.Docs)
             {
                 Updates.Add(m);
             }
-            _offset += page.Length;
-            HasMore = page.Length >= PageSize;
+            _offset = page.NextOffset;
+            HasMore = page.HasMore;
             UpdatesEmpty = Updates.Count == 0;
         }
         catch (Exception ex)

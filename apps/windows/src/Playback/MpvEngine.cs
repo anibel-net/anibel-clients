@@ -24,7 +24,7 @@ namespace Anibel.App.Playback;
 /// Threading: all events (Ready/PositionChanged/…) are marshaled onto the
 /// UI thread's DispatcherQueue — the mpv event thread must never touch XAML.
 /// </summary>
-public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
+public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackControls
 {
     private IntPtr _mpv;
     private Thread? _eventThread;
@@ -55,7 +55,10 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
     public bool IsInitialized => _mpv != IntPtr.Zero;
 
     /// <summary>True when the last Load() carried external subtitle files.</summary>
-    public bool HasSubs { get; private set; }
+    public bool HasSubs
+    {
+        get; private set;
+    }
 
     /// <summary>
     /// configDir is the directory whose <c>fonts/</c> subdirectory mpv/libass
@@ -101,7 +104,8 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
         Option("sub-visibility", "yes");
         Option("sid", "no");                     // pick after load — dub must not auto-select dialogue
         Option("aid", "auto");
-        Option("alang", _preferDubAudio ? "be,bel,be-BY" : "jpn,ja,jp,und");
+        // Expose HLS renditions as video tracks instead of hiding other programs.
+        Option("flatten-editions", "yes");
         Option("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         Option("volume", "100");
 
@@ -174,7 +178,7 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
         }
         // a new file may carry a fresh swapchain — allow rebind
         _swapChainBound = false;
-        _pendingSubs = SubtitlePicker.Filter(subPaths, _preferDubAudio);
+        _pendingSubs = subPaths;
         _subsApplied = false;
         durationCache = null;
         HasSubs = _pendingSubs.Count > 0;
@@ -205,6 +209,34 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
 
     public void TogglePause() => CommandString("cycle pause");
     public void SetPause(bool paused) => CommandString($"set pause {(paused ? "yes" : "no")}");
+
+    public bool IsPaused => _mpv != IntPtr.Zero && (MpvNative.GetFlag(_mpv, "pause") ?? false);
+    public VideoTrackInfo[] ReadVideoTracks()
+    {
+        if (_mpv == IntPtr.Zero) return [];
+        var count = MpvNative.GetInt64(_mpv, "track-list/count") ?? 0;
+        if (count is < 0 or > 1024) throw new InvalidOperationException("Invalid media track count.");
+        var tracks = new List<VideoTrackInfo>();
+        for (var i = 0; i < count; i++)
+        {
+            var prefix = $"track-list/{i}/";
+            if (MpvNative.GetString(_mpv, prefix + "type") != "video") continue;
+            tracks.Add(new(
+                MpvNative.GetInt64(_mpv, prefix + "id") ?? 0,
+                MpvNative.GetInt64(_mpv, prefix + "demux-w") ?? 0,
+                MpvNative.GetInt64(_mpv, prefix + "demux-h") ?? 0,
+                MpvNative.GetInt64(_mpv, prefix + "hls-bitrate") ?? 0,
+                MpvNative.GetString(_mpv, prefix + "codec") ?? "",
+                (MpvNative.GetFlag(_mpv, prefix + "image") ?? false) || (MpvNative.GetFlag(_mpv, prefix + "albumart") ?? false),
+                MpvNative.GetFlag(_mpv, prefix + "selected") ?? false));
+        }
+        return tracks.ToArray();
+    }
+    public void SetVideoTrack(long id)
+    {
+        if (_mpv == IntPtr.Zero || !MpvNative.SetInt64(_mpv, "vid", id))
+            throw new InvalidOperationException("Video quality could not be changed.");
+    }
 
     public void Seek(double seconds)
     {
@@ -286,68 +318,72 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
 
     private void EventLoop(object? _)
     {
-        while (_running)
+        try
         {
-            var evtPtr = MpvNative.mpv_wait_event(_mpv, 1.0);
-            if (evtPtr == IntPtr.Zero)
+            while (_running)
             {
-                continue;
-            }
-            var evt = Marshal.PtrToStructure<MpvNative.MpvEvent>(evtPtr);
-            switch (evt.event_id)
-            {
-                case MpvNative.EventFileLoaded:
-                    ApplyPendingSubs();
-                    ApplyAudioPreference();
-                    OnUi(() => Ready?.Invoke());
-                    break;
+                var evtPtr = MpvNative.mpv_wait_event(_mpv, 1.0);
+                if (evtPtr == IntPtr.Zero)
+                {
+                    continue;
+                }
+                var evt = Marshal.PtrToStructure<MpvNative.MpvEvent>(evtPtr);
+                switch (evt.event_id)
+                {
+                    case MpvNative.EventFileLoaded:
+                        ApplyPendingSubs();
+                        ApplyAudioPreference();
+                        OnUi(() => Ready?.Invoke());
+                        break;
 
-                case MpvNative.EventEndFile:
-                    var endFile = evt.data != IntPtr.Zero
-                        ? Marshal.PtrToStructure<MpvNative.MpvEventEndFile>(evt.data)
-                        : default;
-                    // reason 0 = MPV_END_FILE_REASON_EOF
-                    if (endFile.reason == 0)
-                    {
-                        OnUi(() => Ended?.Invoke());
-                    }
-                    break;
-
-                case MpvNative.EventVideoReconfig:
-                    TryBindSwapChain();
-                    break;
-
-                case MpvNative.EventPlaybackRestart:
-                    OnUi(() => Ready?.Invoke());
-                    break;
-
-                case MpvNative.EventPropertyChange:
-                    var prop = Marshal.PtrToStructure<MpvNative.MpvEventProperty>(evt.data);
-                    var name = Marshal.PtrToStringUTF8(prop.name) ?? "";
-                    if (name == "time-pos" && prop.format == MpvNative.MpvFormatDouble)
-                    {
-                        var pos = Marshal.PtrToStructure<double>(prop.data);
-                        // throttle: ~4 updates/s is plenty for the time label
-                        if (Math.Abs(pos - _lastReportedPos) < 0.25)
+                    case MpvNative.EventEndFile:
+                        var endFile = evt.data != IntPtr.Zero
+                            ? Marshal.PtrToStructure<MpvNative.MpvEventEndFile>(evt.data)
+                            : default;
+                        // reason 0 = MPV_END_FILE_REASON_EOF
+                        if (endFile.reason == 0)
                         {
-                            break;
+                            OnUi(() => Ended?.Invoke());
                         }
-                        _lastReportedPos = pos;
-                        var dur = durationCache ?? MpvNative.GetDouble(_mpv, "duration") ?? -1;
-                        OnUi(() => PositionChanged?.Invoke(pos, dur));
-                    }
-                    else if (name == "duration" && prop.format == MpvNative.MpvFormatDouble)
-                    {
-                        durationCache = Marshal.PtrToStructure<double>(prop.data);
-                    }
-                    else if (name == "pause" && prop.format == MpvNative.MpvFormatFlag)
-                    {
-                        var paused = Marshal.PtrToStructure<int>(prop.data) != 0;
-                        OnUi(() => PauseChanged?.Invoke(paused));
-                    }
-                    break;
+                        break;
+
+                    case MpvNative.EventVideoReconfig:
+                        TryBindSwapChain();
+                        break;
+
+                    case MpvNative.EventPlaybackRestart:
+                        OnUi(() => Ready?.Invoke());
+                        break;
+
+                    case MpvNative.EventPropertyChange:
+                        var prop = Marshal.PtrToStructure<MpvNative.MpvEventProperty>(evt.data);
+                        var name = Marshal.PtrToStringUTF8(prop.name) ?? "";
+                        if (name == "time-pos" && prop.format == MpvNative.MpvFormatDouble)
+                        {
+                            var pos = Marshal.PtrToStructure<double>(prop.data);
+                            // throttle: ~4 updates/s is plenty for the time label
+                            if (Math.Abs(pos - _lastReportedPos) < 0.25)
+                            {
+                                break;
+                            }
+                            _lastReportedPos = pos;
+                            var dur = durationCache ?? MpvNative.GetDouble(_mpv, "duration") ?? -1;
+                            OnUi(() => PositionChanged?.Invoke(pos, dur));
+                        }
+                        else if (name == "duration" && prop.format == MpvNative.MpvFormatDouble)
+                        {
+                            durationCache = Marshal.PtrToStructure<double>(prop.data);
+                        }
+                        else if (name == "pause" && prop.format == MpvNative.MpvFormatFlag)
+                        {
+                            var paused = Marshal.PtrToStructure<int>(prop.data) != 0;
+                            OnUi(() => PauseChanged?.Invoke(paused));
+                        }
+                        break;
+                }
             }
         }
+        catch (Exception ex) { OnUi(() => Error?.Invoke(ex.Message)); }
     }
 
     // Cross-thread: durationCache is reset to null on the UI thread
@@ -390,6 +426,8 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
             return;
         }
         var count = MpvNative.GetInt64(_mpv, "track-list/count") ?? 0;
+        if (count is < 0 or > 1024)
+            throw new InvalidOperationException("Invalid media track count.");
         var tracks = new List<SubtitleTrackInfo>();
         for (var i = 0; i < count; i++)
         {
@@ -406,7 +444,11 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
                 ?? "";
             tracks.Add(new SubtitleTrackInfo(id, title, lang, file));
         }
-        var sid = SubtitlePicker.Pick(tracks, _preferDubAudio);
+        var sid = core.CallAsync<TrackSelectionDto>("selectTracks", new
+        {
+            subtitles = tracks,
+            preferDub = _preferDubAudio
+        }).GetAwaiter().GetResult().Subtitle;
         if (sid is > 0)
         {
             MpvNative.SetInt64(_mpv, "sid", sid.Value);
@@ -428,6 +470,8 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
             return;
         }
         var count = MpvNative.GetInt64(_mpv, "track-list/count") ?? 0;
+        if (count is < 0 or > 1024)
+            throw new InvalidOperationException("Invalid media track count.");
         var tracks = new List<AudioTrackInfo>();
         for (var i = 0; i < count; i++)
         {
@@ -441,7 +485,11 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
             var title = MpvNative.GetString(_mpv, $"track-list/{i}/title") ?? "";
             tracks.Add(new AudioTrackInfo(id, lang, title));
         }
-        var aid = AudioTrackPicker.Pick(tracks, _preferDubAudio);
+        var aid = core.CallAsync<TrackSelectionDto>("selectTracks", new
+        {
+            audio = tracks,
+            preferDub = _preferDubAudio
+        }).GetAwaiter().GetResult().Audio;
         if (aid is > 0)
         {
             MpvNative.SetInt64(_mpv, "aid", aid.Value);
@@ -512,3 +560,7 @@ public sealed class MpvEngine : IPlayerEngine, IPlaybackControls
         _dispatcher = null;
     }
 }
+
+public readonly record struct AudioTrackInfo(long Id, string Lang, string Title);
+public readonly record struct SubtitleTrackInfo(long Id, string Title, string Lang, string FileName);
+public sealed record TrackSelectionDto(long? Audio, long? Subtitle);

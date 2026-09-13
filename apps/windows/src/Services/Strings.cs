@@ -27,7 +27,7 @@ public static class Strings
     public static string ReplyPlaceholder(string username) => $"Адказ @{username}…";
     public static string ReplyLabel(string username) => $"Адказ @{username}";
     public const string FranchiseFallback = "Іншыя часткі франшызы";
-    public static string Rating(double value) => $"Рэйтынг: {value:0.0}/10";
+    public static string Rating(double value) => $"Рэйтынг: {RatingDisplay.Stars(value):0.0}/5";
 
     // --- episode kind bar ---
     public const string KindDub = "Дубляж";

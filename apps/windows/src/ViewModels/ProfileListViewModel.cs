@@ -66,20 +66,7 @@ public partial class ProfileListViewModel : ObservableObject
                 return;
             }
 
-            IReadOnlyList<MediaCard> docs;
-            if (args.Kind == "favorites")
-            {
-                var page = await _core.FavoritesAsync(username, null, 0, 120);
-                docs = page.Docs;
-            }
-            else
-            {
-                var page = await _core.MarksAsync(username, null, 0, 200);
-                docs = page.Docs
-                    .Where(e => e.Media is not null && Matches(e.Status, args.Kind))
-                    .Select(e => e.Media!)
-                    .ToList();
-            }
+            var docs = await _core.CallAsync<MediaCard[]>("personalList", new { kind = args.Kind });
             if (generation != _generation)
             {
                 return;
@@ -107,16 +94,4 @@ public partial class ProfileListViewModel : ObservableObject
         }
     }
 
-    public static bool Matches(string? status, string kind)
-    {
-        var s = (status ?? "").Trim().ToLowerInvariant();
-        return kind switch
-        {
-            "inprogress" => s is "watching" or "reading" or "playing",
-            "done" => s is "watched" or "read" or "played",
-            "planned" => s is "planned",
-            "dropped" => s is "dropped",
-            _ => false,
-        };
-    }
 }

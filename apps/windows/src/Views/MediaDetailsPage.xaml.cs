@@ -51,7 +51,7 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
 
     public void Receive(SessionChangedMessage message)
     {
-        Vm.RefreshPersonalState();
+        _ = Vm.RefreshPersonalAsync();
         DispatcherQueue.TryEnqueue(SyncChrome);
     }
 
@@ -140,6 +140,13 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         MetaText.Text = Vm.Meta;
         GenresText.Text = Vm.Genres;
         RatingText.Text = Vm.Rating;
+        AverageStars.Value = Vm.Media?.Rating is > 0 ? RatingDisplay.Stars(Vm.Media.Rating.Value) : -1;
+        AverageStars.Visibility = Vm.Media?.Rating is > 0 ? Visibility.Visible : Visibility.Collapsed;
+        MyRatingPanel.Visibility = Vm.ShowPersonal ? Visibility.Visible : Visibility.Collapsed;
+        MyRatingStars.Rating = Vm.Media?.IRated ?? 0;
+        MyRatingStars.IsEnabled = !Vm.RatingSaving;
+        MyRatingText.Text = Vm.RatingSaving ? "Захаванне…" : Vm.Media?.IRated is > 0
+            ? $"Мая ацэнка: {Vm.Media.IRated / 2:0.#}/5" : "Мая ацэнка";
         DescriptionText.Text = Vm.Description;
 
         if (Vm.HasStatus)
@@ -210,7 +217,8 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         CommentComposer.Visibility = Vm.ShowPersonal ? Visibility.Visible : Visibility.Collapsed;
         CommentLoginHint.Visibility = Vm.ShowPersonal ? Visibility.Collapsed : Visibility.Visible;
         ReplyChip.Visibility = Vm.HasReplyTarget ? Visibility.Visible : Visibility.Collapsed;
-        ReplyChipText.Text = Vm.ReplyLabel;
+        ReplyChipText.Text = Vm.ReplyLabel + (Vm.ReplyTarget is { } reply ? "\n" + reply.Content : "");
+        SendCommentButton.IsEnabled = CommentBox.IsEnabled = !Vm.IsPosting;
         CommentBox.PlaceholderText = Vm.HasReplyTarget
             ? Strings.ReplyPlaceholder(CommentDisplay.Username(Vm.ReplyTarget!))
             : Strings.WriteCommentPlaceholder;
@@ -305,6 +313,12 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         }
     }
 
+    private async void OnRatingSelected(object? sender, int rating)
+    {
+        await Vm.SetRatingAsync(rating);
+        SyncChrome();
+    }
+
     private async void OnFavoriteClick(object sender, RoutedEventArgs e)
     {
         await Vm.SetFavoriteAsync(FavoriteButton.IsChecked == true);
@@ -388,40 +402,38 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
 
     private void PlayEpisode(EpisodeDto ep)
     {
-        var local = Downloads.FindCompletedEpisode(ep.Id);
+        if (Vm.Media is null) return;
         WeakReferenceMessenger.Default.Send(new PlayEpisodeMessage(new PlayerArgs(
+            Vm.Media.Slug, Vm.Media.MediaType,
             ep.Url ?? "",
             Vm.DisplayTitle,
             EpisodeDisplay.Number(ep),
             ep.Id,
-            local?.VideoPath,
-            local?.SubtitlePaths,
-            local?.FontPaths,
-            ep.Type)));
+            EpisodeType: ep.Type)));
     }
 
-    private void OnDownloadEpisodeClick(object sender, RoutedEventArgs e)
+    private async void OnDownloadEpisodeClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: EpisodeDto ep })
         {
-            QueueEpisode(ep, audioOnly: false);
+            await QueueEpisode(ep, audioOnly: false);
         }
     }
 
-    private void OnDownloadEpisodeAudioClick(object sender, RoutedEventArgs e)
+    private async void OnDownloadEpisodeAudioClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: EpisodeDto ep })
         {
-            QueueEpisode(ep, audioOnly: true);
+            await QueueEpisode(ep, audioOnly: true);
         }
     }
 
-    private void OnDownloadAllEpisodesClick(object sender, RoutedEventArgs e)
+    private async void OnDownloadAllEpisodesClick(object sender, RoutedEventArgs e)
     {
         var n = 0;
-        foreach (var ep in Vm.Episodes)
+        foreach (var ep in Vm.Episodes.ToArray())
         {
-            if (QueueEpisode(ep, audioOnly: false, silent: true))
+            if (await QueueEpisode(ep, audioOnly: false, silent: true))
             {
                 n++;
             }
@@ -431,20 +443,20 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
             : Strings.QueueAdded(n));
     }
 
-    private void OnDownloadChapterClick(object sender, RoutedEventArgs e)
+    private async void OnDownloadChapterClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: ChapterDto ch })
         {
-            QueueChapter(ch);
+            await QueueChapter(ch);
         }
     }
 
-    private void OnDownloadAllChaptersClick(object sender, RoutedEventArgs e)
+    private async void OnDownloadAllChaptersClick(object sender, RoutedEventArgs e)
     {
         var n = 0;
-        foreach (var ch in Vm.Chapters)
+        foreach (var ch in Vm.Chapters.ToArray())
         {
-            if (QueueChapter(ch, silent: true))
+            if (await QueueChapter(ch, silent: true))
             {
                 n++;
             }
@@ -454,103 +466,91 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
             : Strings.QueueAdded(n));
     }
 
-    private void OnDownloadMediaFileClick(object sender, RoutedEventArgs e)
+    private async void OnDownloadMediaFileClick(object sender, RoutedEventArgs e)
     {
         if (Vm.Media is null || string.IsNullOrWhiteSpace(Vm.DownloadUrl))
         {
             return;
         }
-        Downloads.EnqueueFile(new FileDownloadRequest
+        try
         {
-            MediaId = Vm.Media.MediaId,
-            MediaType = Vm.Media.MediaType,
-            Slug = Vm.Media.Slug,
-            Title = Vm.DisplayTitle,
-            FileUrl = Vm.DownloadUrl,
-            PosterUrl = Vm.PosterUrl,
-            Subtitle = Strings.KindFile,
-        });
-        ShowDownloadNote(Strings.FileAddedToDownloads);
+            await Downloads.EnqueueFile(new FileDownloadRequest
+            {
+                MediaId = Vm.Media.MediaId,
+                MediaType = Vm.Media.MediaType,
+                Slug = Vm.Media.Slug,
+                Title = Vm.DisplayTitle,
+                FileUrl = Vm.DownloadUrl,
+                PosterUrl = Vm.PosterUrl,
+                Subtitle = Strings.KindFile,
+            });
+            ShowDownloadNote(Strings.FileAddedToDownloads);
+        }
+        catch (Exception ex) { ShowDownloadError(ex); }
     }
 
-    private bool QueueEpisode(EpisodeDto ep, bool audioOnly, bool silent = false)
+    private async Task<bool> QueueEpisode(EpisodeDto ep, bool audioOnly, bool silent = false)
     {
         if (Vm.Media is null || string.IsNullOrWhiteSpace(ep.Url) || string.IsNullOrWhiteSpace(ep.Id))
         {
             return false;
         }
-        var existing = Downloads.FindCompletedEpisode(ep.Id, audioOnly);
-        if (existing is not null && !silent)
+        try
         {
-            if (audioOnly && existing.HasAudio)
+            await Downloads.EnqueueEpisode(new EpisodeDownloadRequest
             {
-                WeakReferenceMessenger.Default.Send(new PlayEpisodeMessage(new PlayerArgs(
-                    ep.Url ?? "", Vm.DisplayTitle, EpisodeDisplay.Number(ep), ep.Id,
-                    existing.AudioPath, existing.SubtitlePaths, existing.FontPaths)));
-                return false;
+                EpisodeId = ep.Id,
+                EpisodeUrl = ep.Url,
+                MediaId = Vm.Media.MediaId,
+                MediaType = Vm.Media.MediaType,
+                Slug = Vm.Media.Slug,
+                Title = Vm.DisplayTitle,
+                PosterUrl = Vm.PosterUrl,
+                EpisodeLabel = EpisodeDisplay.Number(ep),
+                EpisodeType = ep.Type,
+                AudioOnly = audioOnly,
+            });
+            if (!silent)
+            {
+                ShowDownloadNote(audioOnly
+                    ? Strings.AudioAddedToDownloads
+                    : Strings.EpisodeAddedToDownloads);
             }
-            PlayEpisode(ep);
-            return false;
+            return true;
         }
-        Downloads.EnqueueEpisode(new EpisodeDownloadRequest
-        {
-            EpisodeId = ep.Id,
-            EpisodeUrl = ep.Url,
-            MediaId = Vm.Media.MediaId,
-            MediaType = Vm.Media.MediaType,
-            Slug = Vm.Media.Slug,
-            Title = Vm.DisplayTitle,
-            PosterUrl = Vm.PosterUrl,
-            EpisodeLabel = EpisodeDisplay.Number(ep),
-            EpisodeType = ep.Type,
-            AudioOnly = audioOnly,
-        });
-        if (!silent)
-        {
-            ShowDownloadNote(audioOnly
-                ? Strings.AudioAddedToDownloads
-                : Strings.EpisodeAddedToDownloads);
-        }
-        return true;
+        catch (Exception ex) { ShowDownloadError(ex); return false; }
     }
 
-    private bool QueueChapter(ChapterDto ch, bool silent = false)
+    private async Task<bool> QueueChapter(ChapterDto ch, bool silent = false)
     {
         if (Vm.Media is null)
         {
             return false;
         }
-        var existing = Downloads.FindCompletedChapter(Vm.Media.Slug, ch.Chapter);
-        if (existing is not null && !silent)
+        try
         {
-            WeakReferenceMessenger.Default.Send(new ReadChapterMessage(new ReaderArgs(
-                Vm.Media.Slug,
-                ch.Chapter,
-                Vm.DisplayTitle,
-                ch.Title,
-                ch.Id,
-                Vm.Chapters.Select(c => c.Chapter).ToArray(),
-                existing.ImagePaths)));
-            return false;
+            await Downloads.EnqueueChapter(new ChapterDownloadRequest
+            {
+                MediaId = Vm.Media.MediaId,
+                MediaType = Vm.Media.MediaType,
+                Slug = Vm.Media.Slug,
+                Title = Vm.DisplayTitle,
+                Chapter = ch.Chapter,
+                ChapterId = ch.Id,
+                ChapterTitle = ChapterDisplay.TitleLabel(ch),
+                PosterUrl = Vm.PosterUrl,
+                ChapterList = Vm.Chapters.Select(c => c.Chapter).ToArray(),
+            });
+            if (!silent)
+            {
+                ShowDownloadNote(Strings.ChapterAddedToDownloads);
+            }
+            return true;
         }
-        Downloads.EnqueueChapter(new ChapterDownloadRequest
-        {
-            MediaId = Vm.Media.MediaId,
-            MediaType = Vm.Media.MediaType,
-            Slug = Vm.Media.Slug,
-            Title = Vm.DisplayTitle,
-            Chapter = ch.Chapter,
-            ChapterId = ch.Id,
-            ChapterTitle = ChapterDisplay.TitleLabel(ch),
-            PosterUrl = Vm.PosterUrl,
-            ChapterList = Vm.Chapters.Select(c => c.Chapter).ToArray(),
-        });
-        if (!silent)
-        {
-            ShowDownloadNote(Strings.ChapterAddedToDownloads);
-        }
-        return true;
+        catch (Exception ex) { ShowDownloadError(ex); return false; }
     }
+
+    private void ShowDownloadError(Exception ex) { StatusBar.Severity = InfoBarSeverity.Error; StatusBar.Message = Ui.DisplayMessage(ex); StatusBar.IsOpen = true; }
 
     private void ShowDownloadNote(string message)
     {
@@ -594,18 +594,14 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         Ui.CopyToClipboard(text);
     }
 
-    private void OnReplyCommentClick(object sender, RoutedEventArgs e)
+    private void OnThreadReply(object? sender, CommentDto comment)
     {
-        var comment = CommentFromSender(sender);
-        if (comment is null)
-        {
-            return;
-        }
         Vm.BeginReply(comment);
         ContentPivot.SelectedItem = CommentsPivot;
         SyncChrome();
         if (Vm.ShowPersonal)
         {
+            CommentBox.StartBringIntoView();
             CommentBox.Focus(FocusState.Programmatic);
         }
     }
@@ -623,10 +619,15 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         {
             return;
         }
-        var ok = await Vm.AddCommentAsync(text);
+        var media = Vm.Media;
+        var posting = Vm.AddCommentAsync(text);
+        SyncChrome();
+        var ok = await posting;
+        if (!ReferenceEquals(media, Vm.Media)) return;
+        SyncChrome();
         if (ok)
         {
-            CommentBox.Text = "";
+            if (CommentBox.Text?.Trim() == text) CommentBox.Text = "";
             CommentsEmpty.Visibility = Visibility.Collapsed;
             CommentsList.Visibility = Visibility.Visible;
             SyncChrome();

@@ -12,6 +12,8 @@ pub struct ErrorDto {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum AnibelError {
+    #[error("request cancelled")]
+    Cancelled,
     #[error("http error: {1}")]
     Http(u16, String),
 
@@ -40,6 +42,7 @@ pub enum AnibelError {
 impl AnibelError {
     pub fn code(&self) -> &'static str {
         match self {
+            AnibelError::Cancelled => "cancelled",
             AnibelError::Http(code, _) => match *code {
                 401 => "http_401",
                 404 => "http_404",

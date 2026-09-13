@@ -66,14 +66,17 @@ public sealed class EpisodeDto : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-public sealed record PaginationDto<T>(T[] Docs, long TotalDocs, long? Limit, long? Offset);
+public sealed record PaginationDto<T>(T[] Docs, long TotalDocs, long? Limit, long? Offset, long NextOffset = 0, bool HasMore = false);
+public sealed record UpdatesPageDto(MediaCard[] Docs, long NextOffset, bool HasMore);
 
 public sealed record SubtitleTrackDto(string Url, string[] Fonts, string? Label);
 
 public sealed record FontAssetDto(string Family, string Url);
 
+public enum PlaybackKind { Native, Embed, PendingNative }
+
 public sealed record PlaybackIntentDto(
-    string Kind,
+    PlaybackKind Kind,
     string? PageUrl,
     string? VideoId,
     string? VideoSrc,
@@ -139,6 +142,7 @@ public sealed class MediaDetailDto
     public string? Status { get; set; }
     public long? Year { get; set; }
     public double? Rating { get; set; }
+    public double? IRated { get; set; }
     public string[]? Genres { get; set; }
     public string[]? Language { get; set; }
     public MarkDto? Mark { get; set; }
@@ -184,4 +188,12 @@ public sealed class CommentDto
     public string Content { get; set; } = "";
     public CommentUserDto? User { get; set; }
     public long Created { get; set; }
+    public CommentDto[] Replies { get; set; } = [];
 }
+
+public sealed record ProfileHubDto(long Favorites, long InProgress, long Done, long Planned, long Dropped);
+
+public sealed record MediaKindDto(string Content, string[] Marks);
+public sealed record EpisodeChoicesDto(EpisodeDto[] Items, string[] Kinds, string SelectedKind, long[] Resources);
+
+public sealed record ProfileViewDto(ProfileDto Profile, bool IsOwn);
