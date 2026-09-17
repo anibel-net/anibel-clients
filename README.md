@@ -9,7 +9,8 @@ Monorepo with:
 - `crates/anibel-api` — GraphQL (one `.graphql` file per op) + mapping
 - `crates/anibel-player` — video service + playback intent
 - `apps/windows` — WinUI 3 (C# / .NET 10) app: UI + native layer (libmpv player engine, WebView2 fallback)
-- future: `apps/android`, `apps/ios`, `apps/macos`
+- `apps/android` — Kotlin / Jetpack Compose starter for phones, tablets, and TV; Rust binding is not yet implemented
+- future: `apps/ios`, `apps/macos`
 
 ## Shared core and native clients
 
@@ -40,8 +41,9 @@ half of a star, or use arrow keys and Enter. Cards and title pages use the same
 five-star display. The core and API keep the original 1–10 scale: 3.5 stars is 7.
 
 Windows keeps WinUI view state, mpv/WebView2, file pickers, protected credentials,
-localization, and OS integration. Swift/Kotlin apps and bindings are future work;
-they must use the same core commands.
+localization, and OS integration. The Android starter has mobile and TV welcome
+screens. Its Kotlin binding and the Swift clients remain future work; they must
+use the same core commands. See [Android setup](apps/android/README.md).
 
 Each open title has its own reader or player. Multiple titles can use separate
 PiP windows at the same time. The sidebar's open-title menu can show, float, or
