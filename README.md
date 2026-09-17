@@ -36,9 +36,10 @@ Click a comment author's name or avatar to open their public profile. Replies
 appear below their parent comment. The reply composer shows the selected author
 and text, prevents duplicate sends, and keeps the draft if sending fails.
 
-Signed-in users can rate a title with five stars in half-star steps. Click either
-half of a star, or use arrow keys and Enter. Cards and title pages use the same
-five-star display. The core and API keep the original 1–10 scale: 3.5 stars is 7.
+Signed-in users can rate a title with the native WinUI five-star RatingControl.
+It shows the average until the user sets a personal rating. Use a star or the
+keyboard to select a whole-star rating; saved half-star ratings still display.
+The core and API keep the original 1–10 scale: 3.5 stars is 7.
 
 Windows keeps WinUI view state, mpv/WebView2, file pickers, protected credentials,
 localization, and OS integration. The Android starter has mobile and TV welcome
@@ -55,11 +56,25 @@ arrow keys, or Home/End to move between pages. In one-page view, Page Up/Down
 also changes pages; the mouse wheel does so when the whole page fits at 100%.
 Each open reader keeps its own reading mode and page when moved into or out of PiP.
 
-Use the video settings button in the main player or PiP to select an available
-quality. The menu lists actual video tracks, such as 1080p, 720p, or 360p. A
-quality change keeps the current position, pause state, audio, and subtitles.
-Sources with one quality are identified in the menu. Embedded players keep their
-own quality controls.
+Use the video settings button in the main player or PiP to select audio,
+subtitles (including Off), and video quality. Audio and subtitles are independent:
+dub audio can play with dialogue subtitles when the source provides both.
+All external subtitle tracks stay available; the episode type only sets the
+initial audio/subtitle choice. Track changes keep the current playback session
+and position. The menu lists tracks available in the current source; it does not
+combine separate episode uploads. Embedded players keep their own controls.
+
+Windows video downloads are portable MKV files. In the native player, open
+Settings → Download MKV; the job appears in Downloads. The file contains the
+highest-resolution video stream, all audio and subtitle tracks from that source,
+and subtitle font attachments. Audio/video are copied without re-encoding.
+Use Save to folder in Downloads to export the single MKV, or play it offline
+inside the app. Existing playlist downloads remain readable.
+
+MKV downloads require `ffmpeg` and `ffprobe` on PATH or beside the app executable.
+For an x64 build, put the standalone executables in
+`apps/windows/src/Assets/ffmpeg/x64/`; the build copies them beside the app.
+Google Drive embeds and tracks from separate episode uploads are not included.
 
 This is a new-project data format. Old Windows cache, library, resume and
 credential files are not imported. The core and app must be rebuilt together.

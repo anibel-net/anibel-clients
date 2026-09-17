@@ -93,7 +93,9 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
             var mpv = new MpvEngine(core);
             mpv.PreferDubAudio(opened.PreferDub);
             _engine = mpv;
-            mpv.Initialize(surfaces.VideoPanel, opened.ConfigDirectory, 1920, 1080);
+            mpv.Initialize(surfaces.VideoPanel, opened.ConfigDirectory,
+                (uint)Math.Clamp(surfaces.VideoPanel.ActualWidth, 1, uint.MaxValue),
+                (uint)Math.Clamp(surfaces.VideoPanel.ActualHeight, 1, uint.MaxValue));
             engine = mpv;
         }
         _engine = engine;

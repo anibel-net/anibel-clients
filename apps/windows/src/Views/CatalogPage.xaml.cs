@@ -43,6 +43,9 @@ public sealed partial class CatalogPage : Page
         LanguageFilters.Visibility = Vm.ShowLanguageFilters ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void OnResetFiltersClick(object sender, RoutedEventArgs e) => Vm.ResetFilters();
+    private async void OnRetryFiltersClick(object sender, RoutedEventArgs e) => await Vm.LoadFilterOptionsAsync();
+
     private void OnGridToggle(object sender, RoutedEventArgs e)
     {
         Vm.IsGridMode = true;

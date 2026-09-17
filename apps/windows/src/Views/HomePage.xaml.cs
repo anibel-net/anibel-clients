@@ -20,6 +20,7 @@ public sealed partial class HomePage : Page
     {
         Vm = App.Services.GetRequiredService<HomeViewModel>();
         InitializeComponent();
+        UpdatesView.UsePageScrolling();
         _heroTimer = DispatcherQueue.CreateTimer();
         _heroTimer.Interval = TimeSpan.FromSeconds(7);
         _heroTimer.IsRepeating = true;

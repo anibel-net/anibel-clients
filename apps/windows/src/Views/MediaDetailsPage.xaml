@@ -36,6 +36,10 @@
         <Style x:Key="PlainListItem" TargetType="ListViewItem" BasedOn="{StaticResource FlushListItem}">
             <Setter Property="Background" Value="Transparent" />
         </Style>
+        <Style x:Key="EpisodeListItem" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
     </Page.Resources>
 
     <Grid x:Name="Root" Padding="20,12,20,0" RowSpacing="12">
@@ -135,12 +139,9 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 <TextBlock x:Name="GenresText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap" />
-                <TextBlock x:Name="RatingText" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                <RatingControl x:Name="AverageStars" MaxRating="5" IsReadOnly="True" AutomationProperties.Name="Рэйтынг" />
-                <StackPanel x:Name="MyRatingPanel" Spacing="2">
-                    <TextBlock x:Name="MyRatingText" Text="Мая ацэнка" Style="{StaticResource CaptionTextBlockStyle}" />
-                    <local:StarRating x:Name="MyRatingStars" RatingSelected="OnRatingSelected" />
-                </StackPanel>
+                <RatingControl x:Name="TitleRating" MaxRating="5" IsClearEnabled="False" Loaded="OnRatingLoaded"
+                               HorizontalAlignment="Left" AutomationProperties.Name="Ацэнка тайтла"
+                               ValueChanged="OnRatingSelected" />
                 <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" MaxLines="5"
                            TextTrimming="CharacterEllipsis" Opacity="0.92" />
 
@@ -173,7 +174,7 @@
         <Pivot x:Name="ContentPivot" Grid.Row="2" Margin="0" Padding="0">
             <Pivot.Resources>
                 <Style TargetType="PivotItem">
-                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="Margin" Value="0,16,0,0" />
                     <Setter Property="Padding" Value="0" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </Style>
@@ -209,11 +210,13 @@
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                         <ListView
                             x:Name="EpisodesList"
-                            Padding="0"
+                            Padding="4"
                             Margin="0"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
-                            ItemContainerStyle="{StaticResource FlushListItem}"
+                            ItemContainerStyle="{StaticResource EpisodeListItem}"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                             ScrollViewer.HorizontalScrollMode="Disabled"
                             SelectionMode="None"
@@ -221,22 +224,17 @@
                             ItemClick="OnEpisodeClick">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="core:EpisodeDto">
-                                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1" CornerRadius="8" Padding="12,10"
-                                            HorizontalAlignment="Stretch">
-                                        <Grid ColumnSpacing="12">
+                                        <Grid ColumnSpacing="12" HorizontalAlignment="Stretch">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Width="44" Height="44" CornerRadius="8"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}">
+                                            <Grid Width="32" Height="36">
                                                 <TextBlock Text="{x:Bind Converter={StaticResource EpNumber}}" FontSize="15" FontWeight="SemiBold"
-                                                           Foreground="White"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                            </Border>
+                                            </Grid>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2"
                                                         HorizontalAlignment="Stretch">
                                                 <TextBlock Text="{x:Bind Converter={StaticResource EpTitle}}" TextWrapping="Wrap" MaxLines="2"
@@ -267,7 +265,6 @@
                                                 <FontIcon Glyph="&#xE768;" FontSize="14" Opacity="0.55" />
                                             </StackPanel>
                                         </Grid>
-                                    </Border>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
@@ -421,16 +418,19 @@
                                              Padding="0" MinHeight="0" VerticalAlignment="Center" />
                         </Grid>
                     </Border>
-                    <Grid x:Name="CommentComposer" ColumnSpacing="8" Visibility="Collapsed" Padding="0,4,0,4">
+                    <Grid x:Name="CommentComposer" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="CommentBox" PlaceholderText="Напісаць каментар…"
-                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40"
-                                 MaxLength="2000" />
-                        <Button x:Name="SendCommentButton" Grid.Column="1" Content="Даслаць" Style="{StaticResource AccentButtonStyle}"
-                                VerticalAlignment="Bottom" MinWidth="96" Height="32" Click="OnSendCommentClick" />
+                                 Grid.ColumnSpan="2" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" MaxHeight="160"
+                                 Padding="12,12,60,12" MaxLength="2000" />
+                        <Button x:Name="SendCommentButton" Grid.Column="1" Style="{StaticResource AccentButtonStyle}"
+                                ToolTipService.ToolTip="Даслаць" AutomationProperties.Name="Даслаць"
+                                VerticalAlignment="Bottom" Margin="6" Width="36" Height="36" Padding="0" Click="OnSendCommentClick">
+                            <FontIcon Glyph="&#xE724;" FontSize="16" />
+                        </Button>
                     </Grid>
                     <TextBlock x:Name="CommentLoginHint" Text="Увайдзіце, каб пакінуць каментар"
                                Opacity="0.65" Visibility="Collapsed" Margin="0,4,0,0" />

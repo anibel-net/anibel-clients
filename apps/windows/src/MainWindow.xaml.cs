@@ -30,6 +30,7 @@ public sealed partial class MainWindow : Window,
     private string _suggestQuery = "";
     private bool _layoutBusy;
     private bool _removingHistory;
+    private bool _focusSearchRequested;
 
     private readonly ShortcutMap _shortcuts = new();
     private ContentDialog? _shortcutHelp;
@@ -46,7 +47,11 @@ public sealed partial class MainWindow : Window,
         switch (shortcut.Action)
         {
             case ShortcutAction.Help: await ShowShortcutHelpAsync(); break;
-            case ShortcutAction.Search: GlobalSearch.Focus(FocusState.Keyboard); break;
+            case ShortcutAction.Search:
+                _focusSearchRequested = true;
+                try { GlobalSearch.Focus(FocusState.Keyboard); }
+                finally { _focusSearchRequested = false; }
+                break;
             case ShortcutAction.Navigate:
                 WeakReferenceMessenger.Default.Send(new NavigateMessage(shortcut.Page!)); break;
             case ShortcutAction.Back:
@@ -188,8 +193,19 @@ public sealed partial class MainWindow : Window,
         SetTitleBarVisible(true);
     }
 
+    private void OnSearchGettingFocus(UIElement sender, Microsoft.UI.Xaml.Input.GettingFocusEventArgs e)
+    {
+        // Do not accept fallback focus from a control removed during navigation or refresh.
+        // Explicit search shortcuts, tab navigation, and clicks from live controls still work.
+        if (_focusSearchRequested || e.Direction != Microsoft.UI.Xaml.Input.FocusNavigationDirection.None
+            || e.OldFocusedElement is FrameworkElement { IsLoaded: true }) return;
+        if (RootFrame.Content is MainPage page)
+            e.TrySetNewFocusedElement(page.ContentFocusTarget);
+    }
+
     private void OnSearchGotFocus(object sender, RoutedEventArgs e)
     {
+        if (!KeyboardNavigation.FocusIsWithin(GlobalSearch)) return;
         ShowLocalSuggestions(GlobalSearch.Text);
         var q = GlobalSearch.Text?.Trim() ?? "";
         if (q.Length >= 2)
@@ -197,6 +213,19 @@ public sealed partial class MainWindow : Window,
             _suggestQuery = GlobalSearch.Text ?? q;
             _ = SuggestAsync();
         }
+    }
+
+    private void OnSearchLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (KeyboardNavigation.FocusIsWithin(GlobalSearch)) return;
+        CloseSearchSuggestions();
+    }
+
+    private void CloseSearchSuggestions()
+    {
+        _suggestTimer.Stop();
+        _suggestCts.Cancel();
+        GlobalSearch.IsSuggestionListOpen = false;
     }
 
     private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -218,6 +247,7 @@ public sealed partial class MainWindow : Window,
 
     private void ShowLocalSuggestions(string? text)
     {
+        if (!KeyboardNavigation.FocusIsWithin(GlobalSearch)) return;
         var q = (text ?? "").Trim();
         var items = QuickSearch.Build(q, [], _searchHistory.Items);
         GlobalSearch.ItemsSource = items;
@@ -227,7 +257,7 @@ public sealed partial class MainWindow : Window,
     private async Task SuggestAsync()
     {
         var q = _suggestQuery.Trim();
-        if (q.Length < 2)
+        if (q.Length < 2 || !KeyboardNavigation.FocusIsWithin(GlobalSearch))
         {
             return;
         }
@@ -247,7 +277,8 @@ public sealed partial class MainWindow : Window,
         {
             var core = App.Services.GetRequiredService<ICoreClient>();
             var hits = await core.SearchAsync(q, QuickSearch.FetchCount, ct);
-            if (ct.IsCancellationRequested || q != (GlobalSearch.Text ?? "").Trim())
+            if (ct.IsCancellationRequested || q != (GlobalSearch.Text ?? "").Trim()
+                || !KeyboardNavigation.FocusIsWithin(GlobalSearch))
             {
                 return;
             }
@@ -292,6 +323,7 @@ public sealed partial class MainWindow : Window,
         }
         if (args.ChosenSuggestion is SearchSuggestion chosen)
         {
+            CloseSearchSuggestions();
             if (chosen.IsMore)
             {
                 OpenFullSearch(chosen.Subtitle.Length > 0 ? chosen.Subtitle : sender.Text);
@@ -335,6 +367,7 @@ public sealed partial class MainWindow : Window,
             return;
         }
         Remember(text);
+        CloseSearchSuggestions();
         WeakReferenceMessenger.Default.Send(new GlobalSearchMessage(text.Trim()));
     }
 

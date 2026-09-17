@@ -77,11 +77,11 @@
                                     Margin="6">
                             <Border Style="{StaticResource PosterBadge}"
                                     Visibility="{x:Bind Converter={StaticResource CardShowSub}}">
-                                <TextBlock Text="Суб" Style="{StaticResource PosterBadgeText}" />
+                                <FontIcon Glyph="&#xE190;" FontSize="14" Foreground="White" ToolTipService.ToolTip="Субцітры" AutomationProperties.Name="Субцітры" />
                             </Border>
                             <Border Style="{StaticResource PosterBadge}"
                                     Visibility="{x:Bind Converter={StaticResource CardShowDub}}">
-                                <TextBlock Text="Дуб" Style="{StaticResource PosterBadgeText}" />
+                                <FontIcon Glyph="&#xE720;" FontSize="14" Foreground="White" ToolTipService.ToolTip="Дубляж" AutomationProperties.Name="Дубляж" />
                             </Border>
                         </StackPanel>
                         <Border Style="{StaticResource PosterBadge}"

@@ -6,6 +6,10 @@ query FiltersQuery($mediaType: MediaTypes) {
     studies
     translators
     dubbers
+    programmers
+    audioEngineers
+    typpers
+    cleanners
     editors
   }
 }

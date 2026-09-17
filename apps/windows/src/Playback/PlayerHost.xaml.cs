@@ -28,6 +28,7 @@ public sealed partial class PlayerHost : UserControl
     public event EventHandler<(double Pos, double Dur)>? ProgressChanged;
 
     public bool IsMini => _mini;
+    public bool IsEmbedded => _controller?.Engine is WebView2Engine;
     public bool IsPaused => PlayPauseIcon.Symbol == Symbol.Play;
     public bool IsOpen => _controller is { IsDisposed: false } && Visibility == Visibility.Visible;
     private bool _externalChrome;
@@ -41,7 +42,10 @@ public sealed partial class PlayerHost : UserControl
         var controller = _controller;
         var engine = controller?.Engine as MpvEngine;
         _qualityMenu?.Hide();
-        var menu = _qualityMenu = new MenuFlyout();
+        var menu = _qualityMenu = new MenuFlyout
+        {
+            Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.TopEdgeAlignedRight,
+        };
         menu.Items.Add(new MenuFlyoutItem { Text = "Загрузка…", IsEnabled = false });
         menu.ShowAt(anchor);
         try
@@ -56,9 +60,55 @@ public sealed partial class PlayerHost : UserControl
             var qualities = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks() });
             if (!ReferenceEquals(controller, _controller) || !ReferenceEquals(engine, controller?.Engine)) { menu.Hide(); return; }
             menu.Items.Clear();
+            if (_lastArgs is { DownloadId: null, EpisodeId: not null } args)
+            {
+                var download = new MenuFlyoutItem { Text = "Спампаваць MKV", Icon = new SymbolIcon(Symbol.Download) };
+                download.Click += async (_, _) =>
+                {
+                    menu.Hide();
+                    try
+                    {
+                        await App.Services.GetRequiredService<DownloadService>().EnqueueEpisode(new EpisodeDownloadRequest
+                        {
+                            EpisodeId = args.EpisodeId, EpisodeUrl = args.Url,
+                            MediaId = "", MediaType = args.MediaType, Slug = args.Slug,
+                            Title = args.TitleLabel, EpisodeLabel = args.EpisodeLabel,
+                            EpisodeType = args.EpisodeType
+                        });
+                        if (ReferenceEquals(engine, _controller?.Engine))
+                        {
+                            DownloadNotice.Message = "MKV дададзены ў спампоўкі";
+                            DownloadNotice.Severity = InfoBarSeverity.Success;
+                            DownloadNotice.IsOpen = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        if (ReferenceEquals(engine, _controller?.Engine))
+                        {
+                            DownloadNotice.Message = Ui.DisplayMessage(ex);
+                            DownloadNotice.Severity = InfoBarSeverity.Error;
+                            DownloadNotice.IsOpen = true;
+                        }
+                    }
+                };
+                menu.Items.Add(download);
+                menu.Items.Add(new MenuFlyoutSeparator());
+            }
+            AddTrackMenu(menu, engine, "Аўдыя",
+                engine.ReadAudioTracks().Select(t => (t.Id, TrackLabel(t.Id, t.Title, t.Lang))),
+                engine.AudioTrack, engine.SetAudioTrack);
+            AddTrackMenu(menu, engine, "Субцітры",
+                new[] { (0L, "Выключаны") }.Concat(engine.ReadSubtitleTracks()
+                    .Select(t => (t.Id, TrackLabel(t.Id, t.Title, t.Lang)))),
+                engine.SubTrack, engine.SetSubTrack);
+            var currentQuality = qualities.Choices.FirstOrDefault(q => q.Selected)?.Label ?? "Аўта";
+            var qualityMenu = new MenuFlyoutSubItem { Text = $"Якасць відэа · {currentQuality}" };
+            menu.Items.Add(qualityMenu);
             foreach (var quality in qualities.Choices)
             {
-                var item = new ToggleMenuFlyoutItem { Text = quality.Label, IsChecked = quality.Selected };
+                var item = new MenuFlyoutItem { Text = quality.Label,
+                    Icon = quality.Selected ? new SymbolIcon(Symbol.Accept) : null };
                 item.Click += async (_, _) =>
                 {
                     menu.Hide();
@@ -66,7 +116,10 @@ public sealed partial class PlayerHost : UserControl
                     {
                         if (!ReferenceEquals(engine, _controller?.Engine)) return;
                         var selection = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks(), select = quality.Id });
-                        if (ReferenceEquals(engine, _controller?.Engine) && selection.Video is { } id) engine.SetVideoTrack(id);
+                        if (ReferenceEquals(engine, _controller?.Engine) && selection.Video is { } id)
+                        {
+                            engine.SetVideoTrack(id);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -76,12 +129,12 @@ public sealed partial class PlayerHost : UserControl
                         menu.ShowAt(anchor);
                     }
                 };
-                menu.Items.Add(item);
+                qualityMenu.Items.Add(item);
             }
             if (qualities.Choices.Length <= 1)
             {
-                if (qualities.Choices.Length > 0) menu.Items.Add(new MenuFlyoutSeparator());
-                menu.Items.Add(new MenuFlyoutItem { Text = "Іншыя варыянты якасці недаступныя", IsEnabled = false });
+                if (qualities.Choices.Length > 0) qualityMenu.Items.Add(new MenuFlyoutSeparator());
+                qualityMenu.Items.Add(new MenuFlyoutItem { Text = "Іншыя варыянты якасці недаступныя", IsEnabled = false });
             }
         }
         catch (Exception ex)
@@ -92,6 +145,38 @@ public sealed partial class PlayerHost : UserControl
     }
 
     private async void OnQualityClick(object sender, RoutedEventArgs e) => await ShowQualityMenuAsync((FrameworkElement)sender);
+
+    private static string TrackLabel(long id, string title, string language)
+    {
+        var name = string.IsNullOrWhiteSpace(title) ? $"Дарожка {id}" : title.Trim();
+        return string.IsNullOrWhiteSpace(language) ? name : $"{name} · {language}";
+    }
+
+    private void AddTrackMenu(MenuFlyout menu, MpvEngine engine, string label,
+        IEnumerable<(long Id, string Label)> tracks, long selected, Action<long> select)
+    {
+        var choices = tracks.ToArray();
+        var current = choices.FirstOrDefault(t => t.Id == selected).Label ?? "Не выбрана";
+        var submenu = new MenuFlyoutSubItem { Text = $"{label} · {current}" };
+        foreach (var track in choices)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = track.Label, Icon = track.Id == selected ? new SymbolIcon(Symbol.Accept) : null
+            };
+            item.Click += (_, _) =>
+            {
+                menu.Hide();
+                if (!ReferenceEquals(engine, _controller?.Engine)) return;
+                try { select(track.Id); }
+                catch (Exception ex) { SetStatus(Ui.DisplayMessage(ex), error: true); }
+            };
+            submenu.Items.Add(item);
+        }
+        if (submenu.Items.Count == 0)
+            submenu.Items.Add(new MenuFlyoutItem { Text = "Дарожкі недаступныя", IsEnabled = false });
+        menu.Items.Add(submenu);
+    }
 
     public PlayerHost()
     {
@@ -138,6 +223,11 @@ public sealed partial class PlayerHost : UserControl
     {
         Visibility = Visibility.Visible;
         _lastArgs = args;
+        DownloadNotice.IsOpen = false;
+        QualityLabel.Text = "Налады";
+        EnglishTitleText.Text = args.EnglishTitle?.Trim() ?? "";
+        EnglishTitleText.Visibility = string.IsNullOrWhiteSpace(EnglishTitleText.Text)
+            ? Visibility.Collapsed : Visibility.Visible;
         HideError();
         TitleText.Text = string.IsNullOrEmpty(args.TitleLabel) ? Strings.Episode : args.TitleLabel;
         if (!string.IsNullOrEmpty(args.EpisodeLabel))
@@ -153,7 +243,7 @@ public sealed partial class PlayerHost : UserControl
             var surfaces = new PlayerSurfaces
             {
                 VideoPanel = VideoPanel,
-                EmbedHost = ContentRoot,
+                EmbedHost = EmbedSurface,
             };
             SetStatus(Strings.ResolvingSource);
             opening = controller.StartAsync(args.Url, args.EpisodeId, surfaces, args.EpisodeType, args.DownloadId);
@@ -259,11 +349,24 @@ public sealed partial class PlayerHost : UserControl
 
     private void OnEngineReady()
     {
+        // Layout may finish before the engine exists, so SizeChanged alone is insufficient.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (VideoPanel.ActualWidth > 0 && VideoPanel.ActualHeight > 0)
+                _controller?.Resize((uint)VideoPanel.ActualWidth, (uint)VideoPanel.ActualHeight);
+        });
         HideError();
         Overlay.Visibility = Visibility.Collapsed;
+        var native = _controller?.Controls is not null;
+        var transportVisibility = native ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var control in new FrameworkElement[] { PlayPauseButton, SeekBackButton, SeekForwardButton,
+            SeekSlider, PositionText, MuteButton, VolumeSlider, QualityButton })
+            control.Visibility = transportVisibility;
+        TopBar.Padding = IsEmbedded ? new Thickness(16, 12, 16, 12) : new Thickness(16, 12, 16, 28);
+        BottomBar.Padding = IsEmbedded ? new Thickness(12, 0, 12, 8) : new Thickness(16, 32, 16, 12);
         PlayPauseButton.IsEnabled =
-            SeekBackButton.IsEnabled = SeekForwardButton.IsEnabled = true;
-        SeekSlider.IsEnabled = true;
+            SeekBackButton.IsEnabled = SeekForwardButton.IsEnabled = native;
+        SeekSlider.IsEnabled = native;
         OnEnginePauseChanged((_controller?.Engine as MpvEngine)?.IsPaused ?? false);
         if (!_mini)
         {
@@ -429,11 +532,13 @@ public sealed partial class PlayerHost : UserControl
         BottomBar.Visibility = Visibility.Visible;
         _hideControls.Stop();
         _hideControls.Start();
-        Focus(FocusState.Programmatic);
+        if (!IsEmbedded) Focus(FocusState.Programmatic);
     }
 
     private void HideControlsIfPlaying()
     {
+        // Embedded pages consume pointer input. Keep navigation outside the page visible.
+        if (IsEmbedded || _controller?.Engine is not { IsInitialized: true }) return;
         if (IsQualityMenuOpen) { _hideControls.Start(); return; }
         if (_mini || _externalChrome || _userSeeking)
         {
@@ -453,7 +558,7 @@ public sealed partial class PlayerHost : UserControl
         var current = source as DependencyObject;
         while (current is not null)
         {
-            if (current is Button or Slider)
+            if (current is Button or Slider or WebView2)
             {
                 return true;
             }
@@ -520,7 +625,6 @@ public sealed partial class PlayerHost : UserControl
     public void SetOsFullscreen(bool fullscreen)
     {
         var icon = fullscreen ? Symbol.BackToWindow : Symbol.FullScreen;
-        FullscreenIcon.Symbol = icon;
         FullscreenIconBottom.Symbol = icon;
     }
 

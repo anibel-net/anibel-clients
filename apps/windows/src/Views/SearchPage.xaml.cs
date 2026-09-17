@@ -18,6 +18,32 @@ public sealed partial class SearchPage : Page
     {
         Vm = App.Services.GetRequiredService<SearchViewModel>();
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += (_, _) => Vm.PropertyChanged -= OnSearchStateChanged;
+        UpdateSearchLayout();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Vm.PropertyChanged += OnSearchStateChanged;
+        UpdateSearchLayout();
+    }
+
+    private void OnSearchStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SearchViewModel.Query)) UpdateSearchLayout();
+    }
+
+    private void UpdateSearchLayout()
+    {
+        var idle = string.IsNullOrWhiteSpace(Vm.Query);
+        Grid.SetRowSpan(SearchPanel, idle ? 2 : 1);
+        SearchPanel.VerticalAlignment = idle ? VerticalAlignment.Center : VerticalAlignment.Top;
+        SearchPanel.MaxWidth = idle ? 720 : double.PositiveInfinity;
+        SearchPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
+        SearchBox.MaxWidth = idle ? 720 : double.PositiveInfinity;
+        SearchIntro.Visibility = idle ? Visibility.Visible : Visibility.Collapsed;
+        SearchTools.Visibility = SearchResults.Visibility = idle ? Visibility.Collapsed : Visibility.Visible;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)

@@ -72,6 +72,10 @@
   <Target Name="CopyAnibelCore" AfterTargets="Build">
     <Copy SourceFiles="$(AnibelCoreDll)" DestinationFolder="$(OutDir)" Condition="Exists('$(AnibelCoreDll)')" SkipUnchangedFiles="false" />
   </Target>
+  <ItemGroup Condition="'$(Platform)' == 'x64'">
+    <Content Include="Assets\ffmpeg\x64\*.exe" Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <!-- libmpv is x64-only; copying it into x86/ARM64 outputs would produce
        a build that loads a wrong-architecture DLL at startup -->
   <Target Name="CopyMpv" AfterTargets="Build" Condition="'$(Platform)' == 'x64'">

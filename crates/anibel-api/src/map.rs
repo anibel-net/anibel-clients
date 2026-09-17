@@ -318,6 +318,13 @@ fn filters_from(v: &Value) -> Filters {
         genres: str_vec_opt(v, "genres"),
         studios: str_vec_opt(v, "studios").or_else(|| str_vec_opt(v, "studies")),
         types: str_vec_opt(v, "types"),
+        translators: str_vec_opt(v, "translators"),
+        dubbers: str_vec_opt(v, "dubbers"),
+        editors: str_vec_opt(v, "editors"),
+        programmers: str_vec_opt(v, "programmers"),
+        audio_engineers: str_vec_opt(v, "audioEngineers"),
+        typpers: str_vec_opt(v, "typpers"),
+        cleanners: str_vec_opt(v, "cleanners"),
     }
 }
 
@@ -468,7 +475,14 @@ mod tests {
         let f = filters_from(&json!({
             "years": [2024, "2023"],
             "genres": ["драма", null],
-            "studies": ["studio a"]
+            "studies": ["studio a"],
+            "translators": ["translator"],
+            "editors": ["editor"],
+            "dubbers": ["dubber"],
+            "programmers": ["programmer"],
+            "audioEngineers": ["engineer"],
+            "typpers": ["typper"],
+            "cleanners": ["cleanner"]
         }));
         assert_eq!(f.years, Some(vec![2024, 2023]));
         assert_eq!(f.genres.as_ref().unwrap()[0], "драма");
@@ -476,6 +490,17 @@ mod tests {
         let wire = serde_json::to_value(&f).unwrap();
         assert!(wire.get("studies").is_none());
         assert_eq!(wire["studios"][0], "studio a");
+        for (field, value) in [
+            ("translators", "translator"),
+            ("editors", "editor"),
+            ("dubbers", "dubber"),
+            ("programmers", "programmer"),
+            ("audioEngineers", "engineer"),
+            ("typpers", "typper"),
+            ("cleanners", "cleanner"),
+        ] {
+            assert_eq!(wire[field][0], value);
+        }
     }
 
     #[test]

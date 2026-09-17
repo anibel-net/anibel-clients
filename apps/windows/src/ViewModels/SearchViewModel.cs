@@ -22,7 +22,8 @@ public partial class SearchViewModel : ObservableObject
 
     [ObservableProperty] private string query = "";
     [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private string stats = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasCount))] private string stats = "";
+    public bool HasCount => Stats.Length > 0;
     [ObservableProperty] private bool isEmptyHintVisible = true;
     [ObservableProperty] private bool isGridMode = true;
     [ObservableProperty] private string? statusMessage;
@@ -55,6 +56,7 @@ public partial class SearchViewModel : ObservableObject
         var generation = ++_generation;
         Items.Clear();
         IsBusy = true;
+        Stats = "";
         IsEmptyHintVisible = false;
         StatusMessage = null;
         await Task.Yield();
@@ -71,7 +73,7 @@ public partial class SearchViewModel : ObservableObject
             {
                 Items.Add(m);
             }
-            Stats = Strings.Found(Items.Count);
+            Stats = Items.Count.ToString("N0");
             IsEmptyHintVisible = Items.Count == 0;
             StatusMessage = null;
             RaiseHints();

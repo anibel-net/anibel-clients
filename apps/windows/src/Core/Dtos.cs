@@ -94,7 +94,14 @@ public sealed record AnibelFiltersDto(
     long[]? Years,
     string[]? Genres,
     string[]? Studios,
-    string[]? Types = null);
+    string[]? Types = null,
+    string[]? Translators = null,
+    string[]? Dubbers = null,
+    string[]? Editors = null,
+    string[]? Programmers = null,
+    string[]? AudioEngineers = null,
+    string[]? Typpers = null,
+    string[]? Cleanners = null);
 
 public sealed class SlideDto
 {

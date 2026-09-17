@@ -139,14 +139,14 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         TitleText.Text = Vm.DisplayTitle;
         MetaText.Text = Vm.Meta;
         GenresText.Text = Vm.Genres;
-        RatingText.Text = Vm.Rating;
-        AverageStars.Value = Vm.Media?.Rating is > 0 ? RatingDisplay.Stars(Vm.Media.Rating.Value) : -1;
-        AverageStars.Visibility = Vm.Media?.Rating is > 0 ? Visibility.Visible : Visibility.Collapsed;
-        MyRatingPanel.Visibility = Vm.ShowPersonal ? Visibility.Visible : Visibility.Collapsed;
-        MyRatingStars.Rating = Vm.Media?.IRated ?? 0;
-        MyRatingStars.IsEnabled = !Vm.RatingSaving;
-        MyRatingText.Text = Vm.RatingSaving ? "Захаванне…" : Vm.Media?.IRated is > 0
-            ? $"Мая ацэнка: {Vm.Media.IRated / 2:0.#}/5" : "Мая ацэнка";
+        TitleRating.Value = Vm.ShowPersonal && Vm.Media?.IRated is > 0
+            ? RatingDisplay.Stars(Vm.Media.IRated.Value) : -1;
+        TitleRating.PlaceholderValue = Vm.Media?.Rating is > 0
+            ? RatingDisplay.Stars(Vm.Media.Rating.Value) : -1;
+        TitleRating.IsReadOnly = !Vm.ShowPersonal || Vm.RatingSaving;
+        TitleRating.Caption = Vm.RatingSaving ? "Захаванне…" : TitleRating.Value > 0
+            ? $"Мая ацэнка: {TitleRating.Value:0.0}" : Vm.Rating;
+        ToolTipService.SetToolTip(TitleRating, string.IsNullOrEmpty(Vm.Rating) ? "Ацаніць" : Vm.Rating);
         DescriptionText.Text = Vm.Description;
 
         if (Vm.HasStatus)
@@ -313,8 +313,35 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         }
     }
 
-    private async void OnRatingSelected(object? sender, int rating)
+    private void OnRatingLoaded(object sender, RoutedEventArgs e)
     {
+        // Keep the native hit testing and keyboard support, but hold stars at their resting size.
+        StopStarGrowth(TitleRating);
+    }
+
+    private static void StopStarGrowth(DependencyObject parent)
+    {
+        if (parent is StackPanel panel &&
+            panel.Name is "RatingBackgroundStackPanel" or "RatingForegroundStackPanel")
+        {
+            foreach (var child in panel.Children)
+            {
+                var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(child);
+                visual.StopAnimation("Scale.X");
+                visual.StopAnimation("Scale.Y");
+                visual.Scale = new System.Numerics.Vector3(0.5f, 0.5f, 1);
+            }
+            return;
+        }
+        for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            StopStarGrowth(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i));
+    }
+
+    private async void OnRatingSelected(RatingControl sender, object args)
+    {
+        if (!Vm.ShowPersonal || Vm.RatingSaving || !double.IsFinite(sender.Value) || sender.Value <= 0) return;
+        var rating = (int)Math.Round(Math.Clamp(sender.Value, 0.5, 5) * 2);
+        if (Vm.Media?.IRated == rating) return;
         await Vm.SetRatingAsync(rating);
         SyncChrome();
     }
@@ -409,7 +436,8 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
             Vm.DisplayTitle,
             EpisodeDisplay.Number(ep),
             ep.Id,
-            EpisodeType: ep.Type)));
+            EpisodeType: ep.Type,
+            EnglishTitle: Vm.Media.Title?.En)));
     }
 
     private async void OnDownloadEpisodeClick(object sender, RoutedEventArgs e)

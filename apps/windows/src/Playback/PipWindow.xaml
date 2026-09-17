@@ -29,7 +29,7 @@
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                         Margin="8" Spacing="4" PointerEntered="OnControlsEntered" PointerExited="OnControlsExited">
-                <Button x:Name="QualityButton" Click="OnQualityClick" ToolTipService.ToolTip="Якасць відэа" AutomationProperties.Name="Якасць відэа"
+                <Button x:Name="QualityButton" Click="OnQualityClick" ToolTipService.ToolTip="Налады прайгравання" AutomationProperties.Name="Налады прайгравання"
                         Width="32" Height="32" Padding="0" CornerRadius="16" Background="#CC111111" BorderThickness="0" Visibility="Collapsed">
                     <SymbolIcon Symbol="Setting" Foreground="White" />
                 </Button>

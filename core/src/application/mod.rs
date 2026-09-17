@@ -3,6 +3,7 @@
 mod cache;
 mod downloads;
 mod hls;
+mod mkv;
 mod operations;
 mod playback;
 mod presentation_data;

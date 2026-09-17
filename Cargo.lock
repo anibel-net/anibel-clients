@@ -38,6 +38,7 @@ dependencies = [
  "anibel-player",
  "futures-util",
  "httpmock",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",

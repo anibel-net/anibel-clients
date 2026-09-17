@@ -10,25 +10,36 @@
     mc:Ignorable="d">
     <Page.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolVis" />
+        <Style x:Key="FilterPlaceholder" TargetType="Border">
+            <Setter Property="Width" Value="140" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+        </Style>
     </Page.Resources>
 
-    <Grid Padding="16,8,16,0" RowSpacing="8">
+    <Grid Padding="16,8,16,0" RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Spacing="8">
-        <Grid>
+        <Grid Grid.Row="0" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <TextBlock Text="{x:Bind Vm.Title, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
-                <TextBlock Text="{x:Bind Vm.Stats, Mode=OneWay}" VerticalAlignment="Center"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Border Padding="10,3" CornerRadius="12" VerticalAlignment="Center"
+                        Visibility="{x:Bind Vm.HasCount, Mode=OneWay, Converter={StaticResource BoolVis}}"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        ToolTipService.ToolTip="Колькасць тайтлаў">
+                    <TextBlock Text="{x:Bind Vm.Stats, Mode=OneWay}" FontSize="12"
+                               AutomationProperties.Name="Колькасць тайтлаў"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Border>
             </StackPanel>
             <CommandBar Grid.Column="1" DefaultLabelPosition="Right" OverflowButtonVisibility="Collapsed"
                         Background="Transparent" VerticalAlignment="Center">
@@ -39,52 +50,79 @@
                 <AppBarToggleButton x:Name="ListToggle" Icon="List" Label="Спіс" Click="OnListToggle" />
             </CommandBar>
         </Grid>
+
+        <Grid Grid.Row="1">
+        <StackPanel Spacing="8" IsHitTestVisible="False"
+                    AutomationProperties.Name="Загрузка фільтраў"
+                    Visibility="{x:Bind Vm.IsLoadingFilters, Mode=OneWay, Converter={StaticResource BoolVis}}">
+            <local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8">
+                <Border Style="{StaticResource FilterPlaceholder}" Width="96" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" Width="120" />
+            </local:WrapPanel>
+            <local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8">
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+                <Border Style="{StaticResource FilterPlaceholder}" />
+            </local:WrapPanel>
         </StackPanel>
-
-        <Expander Grid.Row="1" Header="Фільтры" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                  IsExpanded="False">
-            <StackPanel Spacing="10" Padding="0,8,0,4">
-                <local:WrapPanel HorizontalSpacing="12" VerticalSpacing="8">
-                    <ComboBox MinWidth="120" Header="Год" ItemsSource="{x:Bind Vm.Years, Mode=OneWay}"
-                              SelectedIndex="{x:Bind Vm.SelectedYearIndex, Mode=TwoWay}" />
-                    <ComboBox MinWidth="140" Header="Статус" SelectedIndex="{x:Bind Vm.SelectedStatusIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="Усе" />
-                        <ComboBoxItem Content="У выхадзе" />
-                        <ComboBoxItem Content="Завяршыўся" />
-                    </ComboBox>
-                    <ComboBox MinWidth="140" Header="Краіна"
-                              ItemsSource="{x:Bind Vm.Countries, Mode=OneWay}"
-                              SelectedIndex="{x:Bind Vm.SelectedCountryIndex, Mode=TwoWay}" />
-                    <ComboBox MinWidth="140" Header="Тып"
-                              ItemsSource="{x:Bind Vm.ContentTypes, Mode=OneWay}"
-                              SelectedIndex="{x:Bind Vm.SelectedTypeIndex, Mode=TwoWay}"
-                              Visibility="{x:Bind Vm.ShowTypeFilter, Mode=OneWay, Converter={StaticResource BoolVis}}" />
-                    <StackPanel x:Name="LanguageFilters"
-                                VerticalAlignment="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4"
-                                Visibility="Collapsed">
-                        <ToggleButton Content="Субцітры" IsChecked="{x:Bind Vm.SubSelected, Mode=TwoWay}" />
-                        <ToggleButton Content="Дубляж" IsChecked="{x:Bind Vm.DubSelected, Mode=TwoWay}" />
+        <InfoBar IsOpen="{x:Bind Vm.HaveFiltersFailed, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                 Message="Не ўдалося загрузіць фільтры.">
+            <InfoBar.ActionButton>
+                <Button Content="Паўтарыць" Click="OnRetryFiltersClick" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+        <StackPanel Spacing="8" Visibility="{x:Bind Vm.AreFiltersReady, Mode=OneWay, Converter={StaticResource BoolVis}}">
+            <local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8">
+                <StackPanel x:Name="LanguageFilters" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                    <ToggleButton IsChecked="{x:Bind Vm.DubSelected, Mode=TwoWay}"><StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE720;" FontSize="16"/><TextBlock Text="Агучка"/></StackPanel></ToggleButton>
+                    <ToggleButton IsChecked="{x:Bind Vm.SubSelected, Mode=TwoWay}"><StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE190;" FontSize="16"/><TextBlock Text="Субцітры"/></StackPanel></ToggleButton>
+                </StackPanel>
+                <ToggleButton Content="Дунхуа" IsChecked="{x:Bind Vm.ChinaSelected, Mode=TwoWay}" Visibility="{x:Bind Vm.ShowChinaFilter, Mode=OneWay, Converter={StaticResource BoolVis}}" />
+                <ComboBox MinWidth="140" AutomationProperties.Name="Статус" SelectedIndex="{x:Bind Vm.SelectedStatusIndex, Mode=TwoWay}" Visibility="{x:Bind Vm.ShowStatusFilter, Mode=OneWay, Converter={StaticResource BoolVis}}">
+                    <ComboBoxItem Content="Усе статусы" />
+                    <ComboBoxItem Content="Выпускаецца" />
+                    <ComboBoxItem Content="Завершанае" />
+                </ComboBox>
+                <HyperlinkButton Click="OnResetFiltersClick" Padding="8,0" MinHeight="32"
+                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE777;" FontSize="14" />
+                        <TextBlock Text="Скінуць фільтры" />
                     </StackPanel>
-                </local:WrapPanel>
-
-                <TextBlock Text="Жанры" Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <ItemsControl ItemsSource="{x:Bind Vm.Genres, Mode=OneWay}"
-                              HorizontalAlignment="Stretch">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <local:WrapPanel HorizontalSpacing="6" VerticalSpacing="6" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:GenreChip">
-                            <ToggleButton Content="{x:Bind Label}" IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                                          Padding="10,4" CornerRadius="8" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Expander>
+                </HyperlinkButton>
+            </local:WrapPanel>
+            <ItemsControl ItemsSource="{x:Bind Vm.Filters}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CatalogFilter">
+                        <DropDownButton Content="{x:Bind Summary, Mode=OneWay}" MinWidth="140" HorizontalContentAlignment="Stretch">
+                            <DropDownButton.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel Spacing="8" MinWidth="200">
+                                        <TextBlock Text="{x:Bind Label}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <ScrollViewer MaxHeight="320">
+                                            <ItemsControl ItemsSource="{x:Bind Choices}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:FilterChoice">
+                                                        <CheckBox Content="{x:Bind Label}" IsChecked="{x:Bind IsSelected, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+        </Grid>
 
         <Grid Grid.Row="2">
             <local:MediaCollectionView ItemsSource="{x:Bind Vm.Items, Mode=OneWay}"

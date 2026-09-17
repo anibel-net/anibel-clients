@@ -18,6 +18,7 @@ tempfile = "3"
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "gzip", "stream"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 url = "2"
+percent-encoding = "2"
 futures-util = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
 

@@ -51,16 +51,21 @@
             </Border>
         </Grid>
 
-        <Grid x:Name="AccountHost" Visibility="Collapsed" RowSpacing="12" Padding="20,12,20,0">
+        <ScrollViewer x:Name="AccountHost" Visibility="Collapsed"
+                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <Grid RowSpacing="12" Padding="20,12,20,20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel>
-                    <Image x:Name="Wallpaper" Height="150" Stretch="UniformToFill" HorizontalAlignment="Stretch" />
+                    <Grid SizeChanged="OnWallpaperSizeChanged" CornerRadius="8,8,0,0">
+                        <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#55351F" Offset="0"/><GradientStop Color="#28252F" Offset="1"/></LinearGradientBrush></Grid.Background>
+                        <Image x:Name="Wallpaper" Stretch="UniformToFill" HorizontalAlignment="Stretch" />
+                    </Grid>
                     <Grid ColumnSpacing="16" Padding="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -71,13 +76,18 @@
                         <StackPanel Grid.Column="1" Spacing="4">
                             <TextBlock x:Name="HelloText" Style="{StaticResource SubtitleTextBlockStyle}" />
                             <TextBlock x:Name="HandleText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <ScrollViewer MaxHeight="150">
-                                <TextBlock x:Name="BioText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                            </ScrollViewer>
+                            <TextBlock x:Name="BioText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                         </StackPanel>
-                        <StackPanel Grid.Column="2" x:Name="OwnActions" Spacing="8">
-                            <Button Content="Рэдагаваць профіль" Click="OnEditProfileClick" />
-                            <Button Content="Выйсці" Click="OnLogoutClick" />
+                        <StackPanel Grid.Column="2" x:Name="OwnActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                            <Button Click="OnEditProfileClick" ToolTipService.ToolTip="Рэдагаваць профіль" AutomationProperties.Name="Рэдагаваць профіль">
+                                <FontIcon Glyph="&#xE70F;" FontSize="16" />
+                            </Button>
+                            <DropDownButton AutomationProperties.Name="Дзеянні профілю">
+                                <FontIcon Glyph="&#xE712;" FontSize="16" />
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout><MenuFlyoutItem Text="Выйсці" Click="OnLogoutClick"><MenuFlyoutItem.Icon><SymbolIcon Symbol="LeaveChat" /></MenuFlyoutItem.Icon></MenuFlyoutItem></MenuFlyout>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -93,77 +103,58 @@
             </SelectorBar>
 
             <Grid x:Name="PersonalContent" Grid.Row="2">
-                <ScrollViewer x:Name="HubPanel">
-                    <local:WrapPanel HorizontalSpacing="8" VerticalSpacing="8" Margin="0,4,0,16">
-                        <Button Tag="favorites" Click="OnHubCardClick"
-                                Style="{StaticResource DefaultButtonStyle}"
-                                MinWidth="200" MinHeight="104" Padding="16,14"
-                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
-                            <StackPanel Spacing="8">
-                                <FontIcon Glyph="&#xE734;" FontSize="16" HorizontalAlignment="Left"
-                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Text="Закладкі" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="FavCountText"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
+                <Grid x:Name="HubPanel">
+                    <StackPanel Spacing="8" Margin="0,4,0,16">
+                        <Button Tag="favorites" Click="OnHubCardClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" MinHeight="64">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE734;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="Закладкі" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" x:Name="FavCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
+                            </Grid>
                         </Button>
-                        <Button Tag="inprogress" Click="OnHubCardClick"
-                                Style="{StaticResource DefaultButtonStyle}"
-                                MinWidth="200" MinHeight="104" Padding="16,14"
-                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
-                            <StackPanel Spacing="8">
-                                <FontIcon Glyph="&#xE768;" FontSize="16" HorizontalAlignment="Left"
-                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Text="Гляджу / чытаю" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="WatchCountText"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
+                        <Button Tag="inprogress" Click="OnHubCardClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" MinHeight="64">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE768;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="Гляджу / чытаю" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" x:Name="WatchCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
+                            </Grid>
                         </Button>
-                        <Button Tag="done" Click="OnHubCardClick"
-                                Style="{StaticResource DefaultButtonStyle}"
-                                MinWidth="200" MinHeight="104" Padding="16,14"
-                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
-                            <StackPanel Spacing="8">
-                                <FontIcon Glyph="&#xE73E;" FontSize="16" HorizontalAlignment="Left"
-                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Text="Прагледжана" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="DoneCountText"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
+                        <Button Tag="done" Click="OnHubCardClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" MinHeight="64">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE73E;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="Прагледжана" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" x:Name="DoneCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
+                            </Grid>
                         </Button>
-                        <Button Tag="planned" Click="OnHubCardClick"
-                                Style="{StaticResource DefaultButtonStyle}"
-                                MinWidth="200" MinHeight="104" Padding="16,14"
-                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
-                            <StackPanel Spacing="8">
-                                <FontIcon Glyph="&#xE823;" FontSize="16" HorizontalAlignment="Left"
-                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Text="Запланавана" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="PlanCountText"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
+                        <Button Tag="planned" Click="OnHubCardClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" MinHeight="64">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE823;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="Запланавана" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" x:Name="PlanCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
+                            </Grid>
                         </Button>
-                        <Button Tag="dropped" Click="OnHubCardClick"
-                                Style="{StaticResource DefaultButtonStyle}"
-                                MinWidth="200" MinHeight="104" Padding="16,14"
-                                HorizontalContentAlignment="Left" VerticalContentAlignment="Center">
-                            <StackPanel Spacing="8">
-                                <FontIcon Glyph="&#xE711;" FontSize="16" HorizontalAlignment="Left"
-                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Text="Кінуў" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="DropCountText"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
+                        <Button Tag="dropped" Click="OnHubCardClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="16" MinHeight="64">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE711;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="Кінуў" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" x:Name="DropCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
+                            </Grid>
                         </Button>
-                    </local:WrapPanel>
-                </ScrollViewer>
-                <Frame x:Name="ProfileFrame" Visibility="Collapsed" />
+                    </StackPanel>
+                </Grid>
+                <Frame x:Name="ProfileFrame" Visibility="Collapsed" MinHeight="240" />
             </Grid>
         </Grid>
+        </ScrollViewer>
     </Grid>
 </Page>

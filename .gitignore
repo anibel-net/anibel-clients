@@ -21,6 +21,7 @@ loader-assets/
 
 # mpv runtime binary (fetched via scripts/fetch-mpv.ps1)
 apps/windows/src/Assets/libmpv/
+apps/windows/src/Assets/ffmpeg/
 
 # IDE / OS
 .vscode/

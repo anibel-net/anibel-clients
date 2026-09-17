@@ -17,6 +17,12 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionChangedMessage
     public ProfileViewModel Vm { get; }
     private string? _username;
 
+    private void OnWallpaperSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is FrameworkElement banner && e.NewSize.Width > 0)
+            banner.Height = e.NewSize.Width * 9 / 21;
+    }
+
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         _username = (e.Parameter as ProfileArgs)?.Username;
@@ -81,7 +87,7 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionChangedMessage
         Avatar.DisplayName = HelloText.Text;
         Avatar.ProfilePicture = ImageSource(profile?.Avatar, 160);
         Wallpaper.Source = ImageSource(profile?.Wallpaper, 1200);
-        Wallpaper.Visibility = Wallpaper.Source is null ? Visibility.Collapsed : Visibility.Visible;
+
         ProfileError.Message = Vm.StatusMessage ?? "";
         ProfileError.IsOpen = !Vm.LoginError && Vm.HasStatus;
         ProfileLoading.IsActive = Vm.IsBusy && (Vm.IsLoggedIn || _username is not null);
@@ -105,7 +111,9 @@ public sealed partial class ProfilePage : Page, IRecipient<SessionChangedMessage
             XamlRoot = XamlRoot, Title = "Рэдагаваць профіль", Content = editor,
             PrimaryButtonText = "Захаваць", CloseButtonText = "Скасаваць",
             DefaultButton = ContentDialogButton.Primary,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
+        dialog.Resources["ContentDialogMaxWidth"] = 640.0;
         dialog.PrimaryButtonClick += async (_, args) =>
         {
             var deferral = args.GetDeferral();

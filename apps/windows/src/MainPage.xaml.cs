@@ -32,7 +32,6 @@ public sealed partial class MainPage : Page,
     };
 
     private string? _navTag;
-    private bool _paneWasOpen = true;
     private bool _inAppFullscreen;
     // This collection owns native views/windows only. Rust owns media and playback state.
     private sealed class OpenTitle(string kind, string slug, string title, FrameworkElement host)
@@ -68,12 +67,8 @@ public sealed partial class MainPage : Page,
         };
     }
 
-    private async void OnShortcutHelpClick(object sender, RoutedEventArgs e)
-    {
-        if (App.CurrentWindow is MainWindow window) await window.ShowShortcutHelpAsync();
-    }
-
     internal bool HasDockedMedia => DockedTitle is not null;
+    internal Control ContentFocusTarget => ContentFrame;
 
     internal void FocusCards()
     {
@@ -157,11 +152,6 @@ public sealed partial class MainPage : Page,
         if (_closing || !_titles.Contains(title)) return;
         if (DockedTitle is { } current && current != title) MiniHost(current);
         CloseWindow(title);
-        if (!_inAppFullscreen)
-        {
-            if (PlayerLayer.Children.Count == 0) _paneWasOpen = Nav.IsPaneOpen;
-            Nav.IsPaneOpen = false;
-        }
         if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);
         PlayerLayer.Children.Add(title.Host);
         title.Host.Visibility = Visibility.Visible;
@@ -194,7 +184,6 @@ public sealed partial class MainPage : Page,
             pip.Attach(title.Host);
             SetMini(title, true);
             pip.Activate();
-            Nav.IsPaneOpen = _paneWasOpen;
         }
         catch (Exception ex)
         {
@@ -232,7 +221,6 @@ public sealed partial class MainPage : Page,
         if (ReferenceEquals(title.Host.Parent, PlayerLayer))
         {
             ExitInAppFullscreen();
-            Nav.IsPaneOpen = _paneWasOpen;
         }
         CloseWindow(title);
         if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);
@@ -361,7 +349,11 @@ public sealed partial class MainPage : Page,
     }
 
     private void OnContentNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
-        => SyncBack();
+    {
+        // This target remains loaded when a page or its loading controls disappear.
+        ContentFrame.Focus(FocusState.Programmatic);
+        SyncBack();
+    }
 
     private void SyncBack() =>
         Nav.IsBackEnabled = _inAppFullscreen || DockedTitle is not null || ContentFrame.CanGoBack;
@@ -374,8 +366,13 @@ public sealed partial class MainPage : Page,
         SyncBack();
     }
 
-    private void OnNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    private async void OnNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
+        if (args.InvokedItemContainer?.Tag as string == "shortcuts")
+        {
+            if (App.CurrentWindow is MainWindow window) await window.ShowShortcutHelpAsync();
+            return;
+        }
         ShowMini();
         if (args.InvokedItemContainer?.Tag is string tag)
         {

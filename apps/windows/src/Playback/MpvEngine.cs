@@ -39,7 +39,7 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
     // on the mpv event thread (ApplyPendingSubs). volatile so the event thread
     // never observes a stale list reference; the list itself is never mutated
     // after publication.
-    private volatile IReadOnlyList<string> _pendingSubs = [];
+    private volatile IReadOnlyList<(string Path, string Title)> _pendingSubs = [];
     private bool _subsApplied;
     // Cross-thread: _preferDubAudio is written on the UI thread
     // (PreferDubAudio/Initialize) and read on the mpv event thread
@@ -178,7 +178,7 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
         }
         // a new file may carry a fresh swapchain — allow rebind
         _swapChainBound = false;
-        _pendingSubs = subPaths;
+        _pendingSubs = subPaths.Select(path => (path, SubtitleNames.ForAsset(path, intent.Subtitles ?? []))).ToArray();
         _subsApplied = false;
         durationCache = null;
         HasSubs = _pendingSubs.Count > 0;
@@ -279,10 +279,20 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
 
     public void SetSubTrack(long id)
     {
-        if (_mpv != IntPtr.Zero)
-        {
-            MpvNative.SetInt64(_mpv, "sid", id);
-        }
+        if (_mpv == IntPtr.Zero || (id > 0
+            ? !MpvNative.SetInt64(_mpv, "sid", id)
+            : MpvNative.CommandString(_mpv, "set sid no") < 0))
+            throw new InvalidOperationException("Subtitle track could not be changed.");
+        if (!MpvNative.SetFlag(_mpv, "sub-visibility", id > 0))
+            throw new InvalidOperationException("Subtitle visibility could not be changed.");
+    }
+
+    public long AudioTrack => _mpv != IntPtr.Zero ? MpvNative.GetInt64(_mpv, "aid") ?? 0 : -1;
+
+    public void SetAudioTrack(long id)
+    {
+        if (_mpv == IntPtr.Zero || !MpvNative.SetInt64(_mpv, "aid", id))
+            throw new InvalidOperationException("Audio track could not be changed.");
     }
 
     public double Position => _mpv != IntPtr.Zero ? MpvNative.GetDouble(_mpv, "time-pos") ?? -1 : -1;
@@ -393,9 +403,8 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
     private double? durationCache;
 
     /// <summary>
-    /// sub-add only sticks once a file is actually loaded. Dub keeps signs
-    /// only; dialogue files are never attached. Then sid is chosen from the
-    /// realized track list (external + muxed).
+    /// Attach all subtitles after loading, then choose the initial track from
+    /// the dub/sub preference. Other tracks remain available in settings.
     /// </summary>
     private void ApplyPendingSubs()
     {
@@ -404,27 +413,14 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
             return;
         }
         _subsApplied = true;
-        for (var i = 0; i < _pendingSubs.Count; i++)
-        {
-            // select the first kept file immediately — track-list may not
-            // include a just-added external yet, so we cannot rely on Pick.
-            var flag = i == 0 ? "select" : "auto";
-            MpvNative.Command(_mpv, "sub-add", _pendingSubs[i], flag);
-        }
-        if (_pendingSubs.Count > 0)
-        {
-            CommandString("set sub-visibility yes");
-            return;
-        }
+        foreach (var sub in _pendingSubs)
+            MpvNative.Command(_mpv, "sub-add", sub.Path, "auto", sub.Title);
         ApplySubtitlePreference();
     }
 
-    private void ApplySubtitlePreference()
+    public SubtitleTrackInfo[] ReadSubtitleTracks()
     {
-        if (_mpv == IntPtr.Zero)
-        {
-            return;
-        }
+        if (_mpv == IntPtr.Zero) return [];
         var count = MpvNative.GetInt64(_mpv, "track-list/count") ?? 0;
         if (count is < 0 or > 1024)
             throw new InvalidOperationException("Invalid media track count.");
@@ -444,6 +440,16 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
                 ?? "";
             tracks.Add(new SubtitleTrackInfo(id, title, lang, file));
         }
+        return tracks.ToArray();
+    }
+
+    private void ApplySubtitlePreference()
+    {
+        if (_mpv == IntPtr.Zero)
+        {
+            return;
+        }
+        var tracks = ReadSubtitleTracks();
         var sid = core.CallAsync<TrackSelectionDto>("selectTracks", new
         {
             subtitles = tracks,
@@ -453,22 +459,19 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
         {
             MpvNative.SetInt64(_mpv, "sid", sid.Value);
             CommandString("set sub-visibility yes");
-            Debug.WriteLine($"[mpv] sid={sid} dub={_preferDubAudio} subs={tracks.Count}");
+            Debug.WriteLine($"[mpv] sid={sid} dub={_preferDubAudio} subs={tracks.Length}");
         }
         else
         {
             CommandString("set sid no");
             CommandString("set sub-visibility no");
-            Debug.WriteLine($"[mpv] sid=no dub={_preferDubAudio} subs={tracks.Count}");
+            Debug.WriteLine($"[mpv] sid=no dub={_preferDubAudio} subs={tracks.Length}");
         }
     }
 
-    private void ApplyAudioPreference()
+    public AudioTrackInfo[] ReadAudioTracks()
     {
-        if (_mpv == IntPtr.Zero)
-        {
-            return;
-        }
+        if (_mpv == IntPtr.Zero) return [];
         var count = MpvNative.GetInt64(_mpv, "track-list/count") ?? 0;
         if (count is < 0 or > 1024)
             throw new InvalidOperationException("Invalid media track count.");
@@ -485,6 +488,16 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
             var title = MpvNative.GetString(_mpv, $"track-list/{i}/title") ?? "";
             tracks.Add(new AudioTrackInfo(id, lang, title));
         }
+        return tracks.ToArray();
+    }
+
+    private void ApplyAudioPreference()
+    {
+        if (_mpv == IntPtr.Zero)
+        {
+            return;
+        }
+        var tracks = ReadAudioTracks();
         var aid = core.CallAsync<TrackSelectionDto>("selectTracks", new
         {
             audio = tracks,
@@ -493,7 +506,7 @@ public sealed class MpvEngine(ICoreClient core) : IPlayerEngine, IPlaybackContro
         if (aid is > 0)
         {
             MpvNative.SetInt64(_mpv, "aid", aid.Value);
-            Debug.WriteLine($"[mpv] aid={aid} dub={_preferDubAudio} tracks={tracks.Count}");
+            Debug.WriteLine($"[mpv] aid={aid} dub={_preferDubAudio} tracks={tracks.Length}");
         }
     }
 

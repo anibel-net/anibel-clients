@@ -296,6 +296,20 @@ pub struct Filters {
     pub studios: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub types: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub translators: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dubbers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub editors: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub programmers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_engineers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typpers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleanners: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

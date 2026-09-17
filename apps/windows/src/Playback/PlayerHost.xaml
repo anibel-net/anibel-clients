@@ -75,19 +75,25 @@
               PointerExited="OnPointerExited"
               Tapped="OnSurfaceTapped"
               DoubleTapped="OnSurfaceDoubleTapped">
-            <SwapChainPanel x:Name="VideoPanel"
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <SwapChainPanel x:Name="VideoPanel" Grid.RowSpan="3"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             SizeChanged="OnSurfaceSizeChanged" />
+            <Grid x:Name="EmbedSurface" Grid.Row="1" />
 
-            <StackPanel x:Name="Overlay" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <StackPanel x:Name="Overlay" Grid.RowSpan="3" HorizontalAlignment="Center" VerticalAlignment="Center"
                         Spacing="12" MaxWidth="720" IsHitTestVisible="False">
                 <TextBlock x:Name="StatusText" Foreground="#CCFFFFFF" TextAlignment="Center"
                            TextWrapping="Wrap" FontSize="14" />
                 <ProgressRing x:Name="BusyRing" IsActive="False" Width="44" Height="44"
                               Foreground="White" />
             </StackPanel>
-            <Grid x:Name="ErrorHost" Visibility="Collapsed" RequestedTheme="Dark">
+            <Grid x:Name="ErrorHost" Grid.RowSpan="3" Visibility="Collapsed" RequestedTheme="Dark">
                 <views:EmptyState x:Name="ErrorState"
                                   Title="Прабачце!"
                                   Glyph="&#xE7BA;"
@@ -97,8 +103,8 @@
                                   SecondaryClick="OnCopyErrorClick" />
             </Grid>
 
-            <!-- Top overlay: title + window actions -->
-            <Grid x:Name="TopBar" VerticalAlignment="Top" Padding="12,10,12,28" ColumnSpacing="8">
+            <!-- Media information and close action. Playback controls stay below. -->
+            <Grid x:Name="TopBar" VerticalAlignment="Top" Padding="16,12,16,28" ColumnSpacing="12">
                 <Grid.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#CC000000" Offset="0" />
@@ -106,34 +112,23 @@
                     </LinearGradientBrush>
                 </Grid.Background>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button Style="{StaticResource MediaBtn}" Click="OnCollapseClick"
-                        ToolTipService.ToolTip="Выплыўное акно">
-                    <FontIcon Glyph="&#xE89F;" FontSize="16" Foreground="White" />
-                </Button>
-                <TextBlock x:Name="TitleText" Grid.Column="1" Foreground="White" FontSize="15"
-                           FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,44,0"
-                           TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="2" Style="{StaticResource MediaBtn}" Click="OnFullscreenClick"
-                        ToolTipService.ToolTip="На ўвесь экран">
-                    <SymbolIcon x:Name="FullscreenIcon" Symbol="FullScreen" Foreground="White" />
-                </Button>
-                <Button Grid.Column="1" HorizontalAlignment="Right" Style="{StaticResource MediaBtn}" Click="OnQualityClick"
-                        ToolTipService.ToolTip="Якасць відэа" AutomationProperties.Name="Якасць відэа">
-                    <SymbolIcon Symbol="Setting" Foreground="White" />
-                </Button>
-                <Button Grid.Column="3" Style="{StaticResource MediaBtn}" Click="OnCloseClick"
-                        ToolTipService.ToolTip="Закрыць">
+                <StackPanel Spacing="4" VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleText" Foreground="White" FontSize="16"
+                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="EnglishTitleText" Foreground="#BFFFFFFF" FontSize="13"
+                               TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                </StackPanel>
+                <Button Grid.Column="1" Style="{StaticResource MediaBtn}" Click="OnCloseClick"
+                        ToolTipService.ToolTip="Закрыць плэер" AutomationProperties.Name="Закрыць плэер">
                     <SymbolIcon Symbol="Cancel" Foreground="White" />
                 </Button>
             </Grid>
 
             <!-- Bottom overlay: seek + transport, YouTube-style -->
-            <Grid x:Name="BottomBar" VerticalAlignment="Bottom" Padding="16,32,16,12" RowSpacing="0">
+            <Grid x:Name="BottomBar" Grid.Row="2" VerticalAlignment="Bottom" Padding="16,32,16,12" RowSpacing="0">
                 <Grid.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#00000000" Offset="0" />
@@ -153,6 +148,8 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -180,14 +177,28 @@
                     <Slider Grid.Column="6" x:Name="VolumeSlider" Width="92" Minimum="0" Maximum="100"
                             Value="100" Style="{StaticResource MediaSeek}" Margin="0,0,8,0"
                             ValueChanged="OnVolumeChanged" />
-                    <Button Grid.Column="7" Style="{StaticResource MediaBtn}" Click="OnFullscreenClick"
-                            ToolTipService.ToolTip="На ўвесь экран">
+                    <Button x:Name="QualityButton" Grid.Column="7" Style="{StaticResource MediaBtn}" Width="Auto" Padding="10,0"
+                            Click="OnQualityClick" ToolTipService.ToolTip="Налады прайгравання" AutomationProperties.Name="Налады прайгравання">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <SymbolIcon Symbol="Setting" Foreground="White" />
+                            <TextBlock x:Name="QualityLabel" Text="Налады" Foreground="White" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="8" Style="{StaticResource MediaBtn}" Click="OnCollapseClick"
+                            ToolTipService.ToolTip="Выплыўное акно" AutomationProperties.Name="Выплыўное акно">
+                        <PathIcon Width="18" Height="14" Foreground="White"
+                                  Data="F0 M0,0 H24 V18 H0 Z M2,2 V16 H22 V2 Z M12,9 H20 V14 H12 Z" />
+                    </Button>
+                    <Button Grid.Column="9" Style="{StaticResource MediaBtn}" Click="OnFullscreenClick"
+                            ToolTipService.ToolTip="На ўвесь экран" AutomationProperties.Name="На ўвесь экран">
                         <SymbolIcon x:Name="FullscreenIconBottom" Symbol="FullScreen" Foreground="White" />
                     </Button>
                 </Grid>
             </Grid>
 
-            <Grid x:Name="MiniHover" Background="#66000000" Visibility="Collapsed">
+            <InfoBar x:Name="DownloadNotice" Grid.Row="1" Margin="16" VerticalAlignment="Top"
+                     IsOpen="False" IsClosable="True" />
+            <Grid x:Name="MiniHover" Grid.RowSpan="3" Background="#66000000" Visibility="Collapsed">
                 <Button HorizontalAlignment="Center" VerticalAlignment="Center"
                         Click="OnPlayPauseClick" Background="#CC111111" BorderThickness="0"
                         Width="52" Height="52" CornerRadius="26">

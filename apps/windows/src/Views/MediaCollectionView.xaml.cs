@@ -43,6 +43,13 @@ public sealed partial class MediaCollectionView : UserControl
             AttachScrollViewer();
             RelayoutGrid();
         };
+        Unloaded += (_, _) =>
+        {
+            if (_scrollViewer is null) return;
+            _scrollViewer.ViewChanged -= OnViewChanged;
+            _scrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
+            _scrollViewer = null;
+        };
         GridScroll.Loaded += (_, _) =>
         {
             AttachScrollViewer();
@@ -122,6 +129,14 @@ public sealed partial class MediaCollectionView : UserControl
 
     public event EventHandler<MediaCard>? MediaClick;
 
+    public void UsePageScrolling()
+    {
+        GridScroll.VerticalScrollMode = ScrollMode.Disabled;
+        GridScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        ScrollViewer.SetVerticalScrollMode(ListHost, ScrollMode.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(ListHost, ScrollBarVisibility.Disabled);
+    }
+
     public event EventHandler? LoadMoreRequested;
 
     private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -189,6 +204,21 @@ public sealed partial class MediaCollectionView : UserControl
     private void AttachScrollViewer()
     {
         ScrollViewer? sv = IsGridMode ? GridScroll : FindScrollViewer(ListHost);
+        if (GridScroll.VerticalScrollMode == ScrollMode.Disabled)
+        {
+            // Use the page viewport for incremental loading when the header
+            // and collection share one scroll surface.
+            sv = null;
+            for (var parent = VisualTreeHelper.GetParent(this); parent is not null;
+                 parent = VisualTreeHelper.GetParent(parent))
+            {
+                if (parent is ScrollViewer pageScroll)
+                {
+                    sv = pageScroll;
+                    break;
+                }
+            }
+        }
         if (ReferenceEquals(sv, _scrollViewer))
         {
             RelayoutGrid();

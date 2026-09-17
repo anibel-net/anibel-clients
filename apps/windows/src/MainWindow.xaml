@@ -51,6 +51,8 @@
                     PlaceholderText="Пошук анімэ, мангі, кіно, гульняў…"
                     UpdateTextOnSelect="False"
                     GotFocus="OnSearchGotFocus"
+                    GettingFocus="OnSearchGettingFocus"
+                    LostFocus="OnSearchLostFocus"
                     TextChanged="OnSearchTextChanged"
                     SuggestionChosen="OnSuggestionChosen"
                     QuerySubmitted="OnGlobalSearch">

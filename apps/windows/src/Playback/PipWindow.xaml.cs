@@ -135,9 +135,7 @@ public sealed partial class PipWindow : Window
     private void BindPlayer(PlayerHost player)
     {
         _player = player;
-        QualityButton.Visibility = Visibility.Visible;
-        PlayButton.Visibility = Visibility.Visible;
-        SeekSlider.Visibility = Visibility.Visible;
+        UpdatePlayerChrome();
         PlayIcon.Symbol = player.IsPaused ? Symbol.Play : Symbol.Pause;
         player.IsPausedChanged += OnPlayerPaused;
         player.ProgressChanged += OnPlayerProgress;
@@ -156,7 +154,21 @@ public sealed partial class PipWindow : Window
     }
 
     private void OnPlayerPaused(object? sender, bool paused)
-        => PlayIcon.Symbol = paused ? Symbol.Play : Symbol.Pause;
+    {
+        PlayIcon.Symbol = paused ? Symbol.Play : Symbol.Pause;
+        UpdatePlayerChrome();
+    }
+
+    private void UpdatePlayerChrome()
+    {
+        var embedded = _player?.IsEmbedded == true;
+        QualityButton.Visibility = PlayButton.Visibility = SeekSlider.Visibility =
+            embedded ? Visibility.Collapsed : Visibility.Visible;
+        // Reserve space for restore/close, outside the embedded browser's input area.
+        Host.Margin = embedded ? new Thickness(0, 48, 0, 0) : new Thickness(0);
+        Shade.Visibility = embedded ? Visibility.Collapsed : Visibility.Visible;
+        if (embedded) ShowChrome();
+    }
 
     private void OnPlayerProgress(object? sender, (double Pos, double Dur) e)
     {
@@ -220,6 +232,7 @@ public sealed partial class PipWindow : Window
 
     private void HideChrome()
     {
+        if (_player?.IsEmbedded == true) return;
         if (_dragging || _controlsHovered || _player?.IsQualityMenuOpen == true || _content is ReaderHost { KeepOverlayVisible: true }
             || (Root.XamlRoot is not null && FocusManager.GetFocusedElement(Root.XamlRoot) is Control { FocusState: FocusState.Keyboard } && KeyboardNavigation.FocusIsWithin(Chrome)))
         {
@@ -233,7 +246,9 @@ public sealed partial class PipWindow : Window
 
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if ((_reader && !IsWithin(e.OriginalSource, ReaderDragHandle)) || IsControlSource(e.OriginalSource) || !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
+        if ((_reader && !IsWithin(e.OriginalSource, ReaderDragHandle))
+            || (_player?.IsEmbedded == true && IsWithin(e.OriginalSource, Host))
+            || IsControlSource(e.OriginalSource) || !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
         {
             return;
         }

@@ -42,6 +42,7 @@ impl Status {
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub(super) struct Request {
+    pub video_format: VideoFormat,
     pub media_id: String,
     pub media_type: String,
     pub slug: String,
@@ -57,6 +58,13 @@ pub(super) struct Request {
     pub chapter_title: Option<String>,
     pub chapter_list: Vec<f64>,
     pub file_url: Option<String>,
+}
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum VideoFormat {
+    #[default]
+    Source,
+    Mkv,
 }
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -254,7 +262,16 @@ impl Downloads {
         let identity = match kind {
             Kind::Video | Kind::Audio => {
                 required(&request.episode_url, "episodeUrl")?;
-                format!("{:?}:{}", kind, required(&request.episode_id, "episodeId")?)
+                format!(
+                    "{:?}:{}{}",
+                    kind,
+                    required(&request.episode_id, "episodeId")?,
+                    if kind == Kind::Video && request.video_format == VideoFormat::Mkv {
+                        ":mkv"
+                    } else {
+                        ""
+                    }
+                )
             }
             Kind::Manga => {
                 let ch = request
@@ -513,28 +530,56 @@ impl Downloads {
                     intent.video_src.as_deref()
                 }
                 .ok_or_else(|| AnibelError::NotFound("media source".into()))?;
-                let (primary, required) = self.fetch_media(src, &folder, id).await?;
-                if r.kind == Kind::Audio {
-                    if primary.ends_with(".m3u8") && intent.audio_src.is_none() {
-                        return Err(AnibelError::BadArgs(
-                            "source has no separate audio stream".into(),
-                        ));
-                    }
-                    assets.audio_path = Some(primary);
-                } else {
-                    assets.video_path = Some(primary);
-                    if let Some(audio) = intent.audio_src.as_deref() {
-                        let (path, required) = self
-                            .fetch_media(audio, &format!("{folder}/audio"), id)
-                            .await?;
-                        assets.audio_path = Some(path);
-                        assets.required_paths.extend(required);
-                    }
-                }
-                assets.required_paths.extend(required);
                 let (subs, fonts) = self.prepare_assets(&intent, &folder).await?;
-                assets.subtitle_paths = subs;
-                assets.font_paths = fonts;
+                if r.kind == Kind::Video && r.request.video_format == VideoFormat::Mkv {
+                    if subs.len() != intent.subtitles.len() || fonts.len() != intent.fonts.len() {
+                        return Err(AnibelError::Transport("some subtitles or fonts could not be downloaded; retry the MKV download".into()));
+                    }
+                    let path = format!("{folder}/media.mkv");
+                    super::mkv::download(
+                        src,
+                        intent.audio_src.as_deref(),
+                        &subs
+                            .iter()
+                            .map(|p| self.absolute(p))
+                            .collect::<Result<Vec<_>>>()?,
+                        &fonts
+                            .iter()
+                            .map(|p| self.absolute(p))
+                            .collect::<Result<Vec<_>>>()?,
+                        &self.storage.path(&path)?,
+                        &r.request.title,
+                        |bytes| self.progress(id, 0, 0, bytes),
+                    )
+                    .await?;
+                    assets.video_path = Some(path);
+                    // They are now inside the MKV; offline playback must not add them twice.
+                    for file in subs.iter().chain(fonts.iter()) {
+                        std::fs::remove_file(self.storage.path(file)?).map_err(io_error)?;
+                    }
+                } else {
+                    let (primary, required) = self.fetch_media(src, &folder, id).await?;
+                    if r.kind == Kind::Audio {
+                        if primary.ends_with(".m3u8") && intent.audio_src.is_none() {
+                            return Err(AnibelError::BadArgs(
+                                "source has no separate audio stream".into(),
+                            ));
+                        }
+                        assets.audio_path = Some(primary);
+                    } else {
+                        assets.video_path = Some(primary);
+                        if let Some(audio) = intent.audio_src.as_deref() {
+                            let (path, required) = self
+                                .fetch_media(audio, &format!("{folder}/audio"), id)
+                                .await?;
+                            assets.audio_path = Some(path);
+                            assets.required_paths.extend(required);
+                        }
+                    }
+                    assets.required_paths.extend(required);
+                    assets.subtitle_paths = subs;
+                    assets.font_paths = fonts;
+                }
             }
         }
         if let Some(url) = r.request.poster_url.as_deref().filter(|s| !s.is_empty()) {
@@ -623,7 +668,8 @@ impl Downloads {
                         .and_then(|mut s| s.next_back().map(str::to_owned))
                 })
                 .unwrap_or_else(|| "subtitle.ass".into());
-            let name: String = original
+            let decoded = percent_encoding::percent_decode_str(&original).decode_utf8_lossy();
+            let name: String = decoded
                 .chars()
                 .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '_' | '-' | '&'))
                 .take(120)
@@ -673,6 +719,30 @@ impl Downloads {
             return Err(AnibelError::BadArgs(
                 "export destination must be outside core storage".into(),
             ));
+        }
+        if let Some(video) = r.assets.video_path.as_ref().filter(|p| p.ends_with(".mkv")) {
+            let name: String = format!("{} - {}", r.request.title, r.request.episode_label)
+                .chars()
+                .map(|c| {
+                    if c.is_control() || "<>:\"/\\|?*".contains(c) {
+                        '_'
+                    } else {
+                        c
+                    }
+                })
+                .take(120)
+                .collect();
+            let target = destination.join(format!(
+                "{}-{}.mkv",
+                name.trim().trim_end_matches('.'),
+                &digest(id)[..8]
+            ));
+            let temporary = tempfile::NamedTempFile::new_in(&destination).map_err(io_error)?;
+            std::fs::copy(self.storage.path(video)?, temporary.path()).map_err(io_error)?;
+            temporary
+                .persist_noclobber(&target)
+                .map_err(|e| io_error(e.error))?;
+            return Ok(json!({"path":target.to_string_lossy()}));
         }
         let source = self.storage.path(&Self::folder(id))?;
         let target = destination.join(format!("anibel-{}", &digest(id)[..16]));
@@ -733,6 +803,41 @@ mod tests {
             file_url: Some(server.url("/file.pdf")),
             ..Default::default()
         }
+    }
+    #[tokio::test]
+    async fn mkv_export_is_one_file_and_does_not_overwrite() {
+        let server = MockServer::start_async().await;
+        let d = setup(&server);
+        let folder = Downloads::folder("mkv-test");
+        let video = format!("{folder}/media.mkv");
+        std::fs::create_dir_all(d.storage.path(&folder).unwrap()).unwrap();
+        std::fs::write(d.storage.path(&video).unwrap(), b"mkv-fixture").unwrap();
+        let mut request = request(&server);
+        request.title = "Title: / test".into();
+        request.episode_label = "1".into();
+        request.video_format = VideoFormat::Mkv;
+        d.records.lock().unwrap().push(Record {
+            id: "mkv-test".into(),
+            kind: Kind::Video,
+            request,
+            status: Status::Completed,
+            assets: Assets {
+                video_path: Some(video),
+                ..Default::default()
+            },
+            error: None,
+            bytes: 11,
+            parts_done: 1,
+            parts_total: 1,
+            created: 0,
+        });
+        let destination = tempfile::tempdir().unwrap();
+        let exported = d.export("mkv-test", destination.path()).await.unwrap();
+        let path = Path::new(exported["path"].as_str().unwrap());
+        assert_eq!(path.extension().unwrap(), "mkv");
+        assert_eq!(std::fs::read(path).unwrap(), b"mkv-fixture");
+        assert!(d.export("mkv-test", destination.path()).await.is_err());
+        assert_eq!(std::fs::read_dir(destination.path()).unwrap().count(), 1);
     }
     async fn finished(d: &Downloads, id: &str) -> Record {
         tokio::time::timeout(std::time::Duration::from_secs(5), async {

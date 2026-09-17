@@ -18,7 +18,8 @@
         <conv:SlideContentConverter x:Key="SlideContent" />
     </Page.Resources>
 
-    <Grid x:Name="Root" Padding="16,8,16,0" RowSpacing="12">
+    <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+    <Grid x:Name="Root" Padding="16,8,16,16" RowSpacing="12">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="WidthStates">
                 <VisualState x:Name="Narrow">
@@ -27,7 +28,7 @@
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="HeroStage.Height" Value="180" />
-                        <Setter Target="Root.Padding" Value="10,6,10,0" />
+                        <Setter Target="Root.Padding" Value="10,6,10,16" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Wide">
@@ -36,7 +37,7 @@
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="HeroStage.Height" Value="320" />
-                        <Setter Target="Root.Padding" Value="16,8,16,0" />
+                        <Setter Target="Root.Padding" Value="16,8,16,16" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -44,7 +45,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid x:Name="HeroHost" Grid.Row="0"
@@ -139,7 +140,7 @@
             </Button>
         </Grid>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="2" MinHeight="240">
             <local:MediaCollectionView
                 x:Name="UpdatesView"
                 ItemsSource="{x:Bind Vm.Updates, Mode=OneWay}"
@@ -163,4 +164,5 @@
                               Visibility="{x:Bind Vm.ShowUpdatesError, Mode=OneWay, Converter={StaticResource BoolVis}}" />
         </Grid>
     </Grid>
+    </ScrollViewer>
 </Page>

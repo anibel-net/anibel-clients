@@ -9,6 +9,9 @@
     mc:Ignorable="d">
     <Page.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolVis" />
+        <Style x:Key="SearchTextBox" TargetType="TextBox" BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}">
+            <Setter Property="Padding" Value="12,0" />
+        </Style>
     </Page.Resources>
 
     <Grid Padding="16,8,16,0" RowSpacing="8">
@@ -17,41 +20,59 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Spacing="8">
-        <Grid>
+        <StackPanel x:Name="SearchPanel" Grid.Row="0" Spacing="16">
+        <StackPanel x:Name="SearchIntro" Spacing="12" HorizontalAlignment="Center">
+            <FontIcon Glyph="&#xE721;" FontSize="40" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+            <TextBlock Text="Што шукаем?" Style="{StaticResource TitleTextBlockStyle}" />
+        </StackPanel>
+        <Grid ColumnSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <AutoSuggestBox
                 x:Name="SearchBox"
+                Grid.ColumnSpan="2"
                 MaxWidth="720"
-                HorizontalAlignment="Left"
+                HorizontalAlignment="Stretch"
+                VerticalContentAlignment="Center"
+                MinHeight="44"
+                TextBoxStyle="{StaticResource SearchTextBox}"
                 QueryIcon="Find"
                 PlaceholderText="Назва, тып, год…"
                 QuerySubmitted="OnSearchSubmitted" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="{x:Bind Vm.Stats, Mode=OneWay}" VerticalAlignment="Center"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <CommandBar DefaultLabelPosition="Right" OverflowButtonVisibility="Collapsed"
+            <Grid x:Name="SearchTools" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            Visibility="{x:Bind Vm.HasCount, Mode=OneWay, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="Вынікі" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Border Padding="10,3" CornerRadius="12" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <TextBlock Text="{x:Bind Vm.Stats, Mode=OneWay}" FontSize="12" AutomationProperties.Name="Знойдзена тайтлаў" />
+                    </Border>
+                </StackPanel>
+                <CommandBar Grid.Column="1" DefaultLabelPosition="Right" OverflowButtonVisibility="Collapsed"
                             Background="Transparent">
                     <AppBarToggleButton x:Name="GridToggle" Icon="ViewAll" Label="Сетка" IsChecked="True"
                                         Click="OnGridToggle" />
                     <AppBarToggleButton x:Name="ListToggle" Icon="List" Label="Спіс" Click="OnListToggle" />
                 </CommandBar>
-            </StackPanel>
+            </Grid>
         </Grid>
         </StackPanel>
 
-        <Grid Grid.Row="1">
+        <Grid x:Name="SearchResults" Grid.Row="1">
             <local:MediaCollectionView ItemsSource="{x:Bind Vm.Items, Mode=OneWay}"
                                        IsGridMode="{x:Bind Vm.IsGridMode, Mode=OneWay}"
                                        ShowSkeleton="{x:Bind Vm.IsBusy, Mode=OneWay}"
                                        MediaClick="OnMediaClick" />
-            <local:EmptyState Title="Што шукаем?"
-                              Message="Увядзіце назву — напрыклад «death note»."
-                              Glyph="&#xE721;"
-                              Visibility="{x:Bind Vm.ShowIdleState, Mode=OneWay, Converter={StaticResource BoolVis}}" />
+
             <local:EmptyState Title="Нічога не знойдзена"
                               Message="Паспрабуйце іншую назву або праверце напісанне."
                               Glyph="&#xE71C;"

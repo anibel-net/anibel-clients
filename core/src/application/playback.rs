@@ -173,20 +173,7 @@ impl Playback {
                 .collect::<Result<Vec<_>>>()?;
             (intent, paths, config.to_string_lossy().into_owned())
         };
-        let dialogue: Vec<_> = subs
-            .iter()
-            .filter(|p| !super::presentation_data::signs(p))
-            .cloned()
-            .collect();
-        let subs = if prefer_dub {
-            subs.into_iter()
-                .filter(|p| super::presentation_data::signs(p))
-                .collect()
-        } else if !dialogue.is_empty() {
-            dialogue
-        } else {
-            subs
-        };
+        // Keep every track available for manual selection; the player applies the initial preference.
         let mut state = self.state.lock().unwrap();
         if state.sessions.len() >= 8 {
             return Err(AnibelError::BadArgs("too many playback sessions".into()));

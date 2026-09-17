@@ -208,7 +208,7 @@ Events currently emitted (drained via `anibel_core_events`, ~30–60 ms poll fro
 ### 4.4 Cross-platform policy
 
 - No Windows-only deps in core; platform things (secure storage, keychain, DPAPI) stay in host apps
-- No MPV/ffmpeg in core: only **source resolution + metadata**; playback engine is host-side
+- Playback engines remain host-side. Desktop MKV download jobs invoke host FFmpeg/ffprobe tools; the core owns their cancellation and output files.
 - WASM-gen possibility later (browser fallback) as a bonus, not a target
 
 ---

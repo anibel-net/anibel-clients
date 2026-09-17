@@ -38,26 +38,31 @@
                        TextWrapping="Wrap" />
         </StackPanel>
 
-        <Grid Grid.Row="1" ColumnSpacing="12">
+        <Grid Grid.Row="1" ColumnSpacing="12" RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <SelectorBar x:Name="FilterBar" HorizontalAlignment="Left" SelectionChanged="OnFilterChanged">
+            <SelectorBar x:Name="FilterBar" Grid.Row="1" HorizontalAlignment="Left" SelectionChanged="OnFilterChanged">
                 <SelectorBarItem Text="Усе" Tag="all" IsSelected="True" />
-                <SelectorBarItem Text="Спампоўваецца" Tag="active" />
+                <SelectorBarItem Text="У працэсе" Tag="active" />
                 <SelectorBarItem Text="Гатова" Tag="ready" />
             </SelectorBar>
-            <TextBox Grid.Column="1" MaxWidth="280" HorizontalAlignment="Left"
+            <TextBox Grid.ColumnSpan="4" HorizontalAlignment="Stretch" MinHeight="40"
+                     VerticalContentAlignment="Center"
                      PlaceholderText="Пошук у бібліятэцы"
                      Text="{x:Bind Vm.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            <TextBlock Grid.Column="2" Text="{x:Bind Vm.DiskLabel, Mode=OneWay}"
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="{x:Bind Vm.DiskLabel, Mode=OneWay}"
                        VerticalAlignment="Center"
                        Style="{StaticResource CaptionTextBlockStyle}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            <Button Grid.Column="3" Content="Папка" Click="OnOpenFolderClick"
+            <Button Grid.Row="1" Grid.Column="3" Content="Папка" Click="OnOpenFolderClick"
                     ToolTipService.ToolTip="Адкрыць папку спамповак" />
         </Grid>
 
@@ -86,7 +91,7 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <Border Width="56" Height="80" CornerRadius="6"
+                                <Border Width="56" Height="80" CornerRadius="6" Grid.RowSpan="3" VerticalAlignment="Top"
                                         Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
                                     <Image Stretch="UniformToFill"
                                            Source="{Binding DisplayPoster, Converter={StaticResource Img}, ConverterParameter=160}" />
@@ -105,7 +110,7 @@
                                                Opacity="0.7" />
                                 </StackPanel>
 
-                                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="4"
+                                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"
                                             Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource BoolVis}}">
                                     <ProgressBar Value="{x:Bind ProgressPercent, Mode=OneWay}"
                                                  Maximum="100" IsIndeterminate="{x:Bind ProgressIsUnknown, Mode=OneWay}" />
@@ -114,7 +119,7 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
 
-                                <InfoBar Grid.Row="1" Grid.ColumnSpan="2"
+                                <InfoBar Grid.Row="1" Grid.Column="1"
                                          Severity="Error" IsClosable="False" IsOpen="True"
                                          Message="{x:Bind Error, Mode=OneWay}"
                                          Visibility="{x:Bind IsFailed, Mode=OneWay, Converter={StaticResource BoolVis}}">
@@ -124,8 +129,7 @@
                                     </InfoBar.ActionButton>
                                 </InfoBar>
 
-                                <StackPanel Grid.Row="2" Grid.ColumnSpan="2"
-                                            Orientation="Horizontal" Spacing="8">
+                                <local:WrapPanel Grid.Row="2" Grid.Column="1" HorizontalSpacing="8" VerticalSpacing="8">
                                     <Button Content="{x:Bind PlayLabel, Mode=OneWay}"
                                             Style="{StaticResource AccentButtonStyle}"
                                             Tag="{x:Bind}" Click="OnPlayClick"
@@ -140,7 +144,7 @@
                                             Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource InvVis}}" />
                                     <Button Content="Да тайтла" Tag="{x:Bind}" Click="OnOpenTitleClick"
                                             Visibility="{x:Bind HasSlug, Mode=OneWay, Converter={StaticResource BoolVis}}" />
-                                </StackPanel>
+                                </local:WrapPanel>
                             </Grid>
                         </Border>
                     </DataTemplate>

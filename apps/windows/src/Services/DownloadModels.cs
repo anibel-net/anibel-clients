@@ -19,8 +19,11 @@ public enum DownloadStatus
     Cancelled,
 }
 
+public enum VideoDownloadFormat { Source, Mkv }
+
 public sealed class EpisodeDownloadRequest
 {
+    public VideoDownloadFormat VideoFormat { get; init; } = VideoDownloadFormat.Mkv;
     public required string EpisodeId
     {
         get; init;
@@ -132,6 +135,7 @@ public sealed class FileDownloadRequest
 /// <summary>Display projection of a Rust-owned download snapshot.</summary>
 public sealed partial class DownloadItem : ObservableObject
 {
+    [ObservableProperty] public partial VideoDownloadFormat VideoFormat { get; set; }
     [ObservableProperty] public partial string Id { get; set; } = "";
     [ObservableProperty] public partial string MediaId { get; set; } = "";
     [ObservableProperty] public partial string MediaType { get; set; } = "";
@@ -234,6 +238,7 @@ public sealed partial class DownloadItem : ObservableObject
 
     public string KindLabel => Kind switch
     {
+        DownloadKind.Video when VideoFormat == VideoDownloadFormat.Mkv => $"{Strings.KindVideo} · MKV",
         DownloadKind.Audio => Strings.KindAudio,
         DownloadKind.Manga => Strings.KindManga,
         DownloadKind.File => Strings.KindFile,

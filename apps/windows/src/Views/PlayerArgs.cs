@@ -9,4 +9,5 @@ public sealed record PlayerArgs(
     string EpisodeLabel,
     string? EpisodeId,
     string? DownloadId = null,
-    string? EpisodeType = null);
+    string? EpisodeType = null,
+    string? EnglishTitle = null);

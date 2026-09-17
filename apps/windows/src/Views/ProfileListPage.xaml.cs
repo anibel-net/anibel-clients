@@ -18,6 +18,7 @@ public sealed partial class ProfileListPage : Page, IRecipient<SessionChangedMes
     {
         Vm = App.Services.GetRequiredService<ProfileListViewModel>();
         InitializeComponent();
+        ListView.UsePageScrolling();
         ListView.ItemsSource = Vm.Items;
         Loaded += (_, _) => WeakReferenceMessenger.Default.RegisterAll(this);
         Unloaded += (_, _) => WeakReferenceMessenger.Default.UnregisterAll(this);

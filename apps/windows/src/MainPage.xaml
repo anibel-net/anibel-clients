@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:playback="using:Anibel.App.Playback"
     xmlns:reading="using:Anibel.App.Reading"
+    xmlns:animated="using:Microsoft.UI.Xaml.Controls.AnimatedVisuals"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -25,17 +26,19 @@
             ItemInvoked="OnNavItemInvoked"
             BackRequested="OnBackRequested">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Главная" Tag="home">
+                <NavigationViewItem Content="Галоўная" Tag="home">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Home" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Пошук" Tag="search">
                     <NavigationViewItem.Icon>
-                        <SymbolIcon Symbol="Find" />
+                        <AnimatedIcon>
+                            <AnimatedIcon.Source><animated:AnimatedFindVisualSource /></AnimatedIcon.Source>
+                            <AnimatedIcon.FallbackIconSource><SymbolIconSource Symbol="Find" /></AnimatedIcon.FallbackIconSource>
+                        </AnimatedIcon>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItemHeader Content="Каталог" />
                 <NavigationViewItem Content="Анімэ" Tag="anime">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7F4;" />
@@ -43,7 +46,7 @@
                 </NavigationViewItem>
                 <NavigationViewItem Content="Манга" Tag="manga">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE89A;" />
+                        <FontIcon Glyph="&#xE8F1;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Кіно" Tag="cinema">
@@ -61,35 +64,35 @@
                         <FontIcon Glyph="&#xE82D;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
                 <NavigationViewItem Content="Профіль" Tag="profile">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Contact" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Спампаванае" Tag="downloads">
+                <NavigationViewItem Content="Спампоўкі" Tag="downloads">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE896;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-            </NavigationView.MenuItems>
-
-            <NavigationView.FooterMenuItems>
                 <NavigationViewItem Content="Налады" Tag="settings">
                     <NavigationViewItem.Icon>
-                        <SymbolIcon Symbol="Setting" />
+                        <AnimatedIcon>
+                            <AnimatedIcon.Source><animated:AnimatedSettingsVisualSource /></AnimatedIcon.Source>
+                            <AnimatedIcon.FallbackIconSource><SymbolIconSource Symbol="Setting" /></AnimatedIcon.FallbackIconSource>
+                        </AnimatedIcon>
                     </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Спалучэнні клавіш" Tag="shortcuts" SelectsOnInvoked="False"
+                                    ToolTipService.ToolTip="Спалучэнні клавіш (F1)">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Help" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
             <NavigationView.PaneFooter>
                 <StackPanel>
-                    <Button Width="32" Height="32" Padding="0" Margin="8"
-                            HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
-                            AutomationProperties.Name="Спалучэнні клавіш"
-                            ToolTipService.ToolTip="Спалучэнні клавіш (F1)"
-                            Click="OnShortcutHelpClick">
-                        <TextBlock Text="?" FontSize="18" FontWeight="SemiBold" />
-                    </Button>
                 <DropDownButton x:Name="OpenTitlesButton" Content="Адкрытыя тайтлы"
                                 AutomationProperties.AutomationId="OpenTitles" Visibility="Collapsed" Margin="8">
                     <DropDownButton.Flyout>
@@ -98,7 +101,8 @@
                 </DropDownButton>
                 </StackPanel>
             </NavigationView.PaneFooter>
-            <Frame x:Name="ContentFrame" Navigated="OnContentNavigated" />
+            <Frame x:Name="ContentFrame" Navigated="OnContentNavigated"
+                   IsTabStop="True" UseSystemFocusVisuals="False" />
         </NavigationView>
         <Grid x:Name="PlayerLayer" Background="{x:Null}" IsHitTestVisible="False" Visibility="Collapsed" />
     </Grid>

@@ -171,6 +171,104 @@ public class SearchViewModelTests
 public class CatalogViewModelTests
 {
     [Fact]
+    public async Task Filters_stay_loading_until_all_options_arrive()
+    {
+        var pending = new TaskCompletionSource<AnibelFiltersDto>();
+        var core = new FakeCoreClient { FilterHandler = () => pending.Task };
+        var vm = new CatalogViewModel(core);
+        var loading = vm.OpenAsync("manga", "Манга");
+        Assert.True(vm.IsLoadingFilters);
+        Assert.False(vm.AreFiltersReady);
+        pending.SetResult(new([2025], ["drama"], []));
+        await loading;
+        Assert.False(vm.IsLoadingFilters);
+        Assert.True(vm.AreFiltersReady);
+        Assert.Equal(2, vm.Filters.Count);
+    }
+
+    [Fact]
+    public async Task Failed_filters_can_retry_without_exposing_partial_controls()
+    {
+        var core = new FakeCoreClient
+        {
+            FilterHandler = () => Task.FromException<AnibelFiltersDto>(new Exception("offline")),
+        };
+        var vm = new CatalogViewModel(core);
+        await vm.LoadFilterOptionsAsync();
+        Assert.True(vm.HaveFiltersFailed);
+        Assert.False(vm.IsLoadingFilters);
+        Assert.False(vm.AreFiltersReady);
+        core.FilterHandler = null;
+        await vm.LoadFilterOptionsAsync();
+        Assert.True(vm.AreFiltersReady);
+        Assert.False(vm.HaveFiltersFailed);
+    }
+
+    [Fact]
+    public async Task Older_filter_response_cannot_end_a_newer_loading_state()
+    {
+        var first = new TaskCompletionSource<AnibelFiltersDto>();
+        var second = new TaskCompletionSource<AnibelFiltersDto>();
+        var core = new FakeCoreClient { FilterHandler = () => first.Task };
+        var vm = new CatalogViewModel(core);
+        var old = vm.LoadFilterOptionsAsync();
+        core.FilterHandler = () => second.Task;
+        var current = vm.LoadFilterOptionsAsync();
+        first.SetResult(new([], ["old"], []));
+        await old;
+        Assert.True(vm.IsLoadingFilters);
+        Assert.Empty(vm.Filters);
+        second.SetResult(new([], ["new"], []));
+        await current;
+        Assert.True(vm.AreFiltersReady);
+        Assert.Equal("new", Assert.Single(Assert.Single(vm.Filters).Choices).Value);
+    }
+
+    [Fact]
+    public async Task Multiple_filter_values_keep_api_keys_and_reset_together()
+    {
+        var core = new FakeCoreClient
+        {
+            Filters = new AnibelFiltersDto([2025, 2024], ["martial-arts"], ["Studio"],
+                Translators: ["Translator"], AudioEngineers: ["Engineer"]),
+        };
+        var vm = new CatalogViewModel(core);
+        await vm.OpenAsync("anime", "Анімэ");
+        foreach (var choice in vm.Filters.SelectMany(f => f.Choices)) choice.IsSelected = true;
+        vm.ChinaSelected = vm.DubSelected = true;
+        await vm.ForceRefreshAsync();
+        var sent = System.Text.Json.JsonSerializer.SerializeToElement(core.LastMediaListFilters);
+        Assert.Equal(new long[] { 2025, 2024 }, sent.GetProperty("year").EnumerateArray().Select(x => x.GetInt64()));
+        Assert.Equal("martial-arts", sent.GetProperty("genres")[0].GetString());
+        Assert.Equal("Studio", sent.GetProperty("studies")[0].GetString());
+        Assert.Equal("Engineer", sent.GetProperty("audioEngineers")[0].GetString());
+        Assert.Equal("china", sent.GetProperty("country").GetString());
+        Assert.Equal("dub", sent.GetProperty("language")[0].GetString());
+        vm.ResetFilters();
+        await vm.ForceRefreshAsync();
+        Assert.Empty(System.Text.Json.JsonSerializer.SerializeToElement(core.LastMediaListFilters).EnumerateObject());
+    }
+
+    [Theory]
+    [InlineData("anime", true, true)]
+    [InlineData("cinema", false, true)]
+    [InlineData("manga", false, false)]
+    [InlineData("books", false, false)]
+    [InlineData("games", false, false)]
+    public async Task Filters_follow_catalog_support(string type, bool studio, bool dub)
+    {
+        var core = new FakeCoreClient
+        {
+            Filters = new AnibelFiltersDto([2025], ["drama"], ["Studio"], ["tv"], Dubbers: ["Dubber"]),
+        };
+        var vm = new CatalogViewModel(core);
+        await vm.OpenAsync(type, type);
+        Assert.Equal(studio, vm.Filters.Any(f => f.Key == "studies"));
+        Assert.Equal(dub, vm.Filters.Any(f => f.Key == "dubbers"));
+        Assert.Equal(type != "games", vm.Filters.Any(f => f.Key == "type"));
+    }
+
+    [Fact]
     public async Task OpenAsync_loads_filters_and_page()
     {
         var core = new FakeCoreClient
@@ -184,8 +282,8 @@ public class CatalogViewModelTests
         Assert.Equal("Анімэ", vm.Title);
         Assert.Single(vm.Items);
         Assert.Contains("12", vm.Stats);
-        Assert.True(vm.Years.Count >= 3);
-        Assert.Single(vm.Genres);
+        Assert.Equal(2, vm.Filters.Single(f => f.Key == "year").Choices.Length);
+        Assert.Single(vm.Filters.Single(f => f.Key == "genres").Choices);
         Assert.True(vm.HasMore);
         Assert.Equal(0, core.LastMediaListOffset);
         Assert.True(vm.ShowLanguageFilters);
@@ -289,7 +387,7 @@ public class CatalogViewModelTests
         Assert.Equal("Анімэ", Ui.MediaType("anime"));
         Assert.Equal("Субцітры", Ui.Language("sub"));
         Assert.Equal("Дубляж", Ui.Language("dub"));
-        Assert.Equal("Тэлесерыял", Ui.ContentType("tv"));
+        Assert.Equal("tv-серыял", Ui.ContentType("tv"));
     }
 }
 
@@ -635,11 +733,11 @@ public class MediaCardDisplayTests
             Status = "ongoing",
             Language = ["sub", "dub"],
         };
-        Assert.Equal("У выхадзе", CardDisplay.StatusLabel(card));
+        Assert.Equal("Выпускаецца", CardDisplay.StatusLabel(card));
         Assert.True(CardDisplay.ShowSub(card));
         Assert.True(CardDisplay.ShowDub(card));
         Assert.Equal("Субцітры · Дубляж", CardDisplay.LanguageLabel(card));
-        Assert.Contains("У выхадзе", CardDisplay.InfoLine(card));
+        Assert.Contains("Выпускаецца", CardDisplay.InfoLine(card));
         Assert.Contains("Субцітры", CardDisplay.InfoLine(card));
         Assert.Contains("Дубляж", CardDisplay.InfoLine(card));
     }

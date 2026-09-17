@@ -41,6 +41,7 @@ public class FakeCoreClient : ICoreClient
         get; set;
     }
     public AnibelFiltersDto Filters { get; set; } = new([], [], []);
+    public Func<Task<AnibelFiltersDto>>? FilterHandler { get; set; }
     public PaginationDto<CommentDto> Comments { get; set; } = new([], 0, 0, 0);
     public PaginationDto<ChapterDto> Chapters { get; set; } = new([], 0, 0, 0);
     public List<EpisodeDto> Episodes { get; set; } = [];
@@ -77,6 +78,7 @@ public class FakeCoreClient : ICoreClient
     }
     public Task<List<MediaCard>> TrendsAsync(string type = "all", string date = "week", int limit = 12, CancellationToken ct = default)
         => Task.FromResult(Trends);
+    public object? LastMediaListFilters { get; private set; }
     public long LastMediaListOffset
     {
         get; private set;
@@ -93,6 +95,7 @@ public class FakeCoreClient : ICoreClient
     {
         MediaListCalls++;
         LastMediaListOffset = offset;
+        LastMediaListFilters = filters;
         LastMediaListLimit = limit;
         if (MediaListError is not null)
         {
@@ -118,7 +121,7 @@ public class FakeCoreClient : ICoreClient
     public Task<MediaDetailDto?> MediaAsync(string slug, string? mediaType = null, CancellationToken ct = default)
         => Task.FromResult(Media);
     public Task<AnibelFiltersDto> FiltersAsync(string mediaType, CancellationToken ct = default)
-        => Task.FromResult(Filters);
+        => FilterHandler?.Invoke() ?? Task.FromResult(Filters);
     public Task<PaginationDto<CommentDto>> CommentsAsync(string mediaId, string mediaType, int offset = 0, int limit = 20, CancellationToken ct = default)
         => Task.FromResult(Comments);
     public string? LastAddedCommentContent

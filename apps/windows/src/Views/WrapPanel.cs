@@ -42,6 +42,7 @@ public sealed class WrapPanel : Panel
 
         foreach (var child in Children)
         {
+            if (child.Visibility == Visibility.Collapsed) continue;
             child.Measure(availableSize);
             var size = child.DesiredSize;
             if (x > 0 && x + size.Width > limit)
@@ -69,6 +70,7 @@ public sealed class WrapPanel : Panel
 
         foreach (var child in Children)
         {
+            if (child.Visibility == Visibility.Collapsed) continue;
             var size = child.DesiredSize;
             if (x > 0 && x + size.Width > finalSize.Width)
             {
