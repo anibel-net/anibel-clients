@@ -13,10 +13,9 @@ namespace Anibel.App.Playback;
 public sealed partial class PlayerHost : UserControl
 {
     private PlayerController? _controller;
-    private readonly DispatcherQueueTimer _seekDebounce;
     private readonly DispatcherQueueTimer _hideControls;
     private bool _updatingSlider;
-    private bool _userSeeking;
+    private bool _controlsHovered;
     private double _sliderDuration;
     private bool _mini;
 
@@ -40,7 +39,7 @@ public sealed partial class PlayerHost : UserControl
     public async Task ShowQualityMenuAsync(FrameworkElement anchor)
     {
         var controller = _controller;
-        var engine = controller?.Engine as MpvEngine;
+        var engine = controller?.Engine as WindowsMediaEngine;
         _qualityMenu?.Hide();
         var menu = _qualityMenu = new MenuFlyout
         {
@@ -95,7 +94,7 @@ public sealed partial class PlayerHost : UserControl
                 menu.Items.Add(download);
                 menu.Items.Add(new MenuFlyoutSeparator());
             }
-            AddTrackMenu(menu, engine, "Аўдыя",
+            AddTrackMenu(menu, engine, "Аўдыё",
                 engine.ReadAudioTracks().Select(t => (t.Id, TrackLabel(t.Id, t.Title, t.Lang))),
                 engine.AudioTrack, engine.SetAudioTrack);
             AddTrackMenu(menu, engine, "Субцітры",
@@ -105,6 +104,16 @@ public sealed partial class PlayerHost : UserControl
             var currentQuality = qualities.Choices.FirstOrDefault(q => q.Selected)?.Label ?? "Аўта";
             var qualityMenu = new MenuFlyoutSubItem { Text = $"Якасць відэа · {currentQuality}" };
             menu.Items.Add(qualityMenu);
+            if (engine.IsAdaptive)
+            {
+                var automatic = new MenuFlyoutItem { Text = "Аўта", Icon = engine.IsAutomaticQuality ? new SymbolIcon(Symbol.Accept) : null };
+                automatic.Click += (_, _) =>
+                {
+                    menu.Hide();
+                    if (ReferenceEquals(engine, _controller?.Engine)) engine.SetAutomaticQuality();
+                };
+                qualityMenu.Items.Add(automatic);
+            }
             foreach (var quality in qualities.Choices)
             {
                 var item = new MenuFlyoutItem { Text = quality.Label,
@@ -118,7 +127,9 @@ public sealed partial class PlayerHost : UserControl
                         var selection = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks(), select = quality.Id });
                         if (ReferenceEquals(engine, _controller?.Engine) && selection.Video is { } id)
                         {
-                            engine.SetVideoTrack(id);
+                            QualityButton.IsEnabled = false;
+                            QualityLabel.Text = "Пераключэнне…";
+                            await engine.SetVideoTrackAsync(id);
                         }
                     }
                     catch (Exception ex)
@@ -127,6 +138,11 @@ public sealed partial class PlayerHost : UserControl
                         menu.Items.Clear();
                         menu.Items.Add(new MenuFlyoutItem { Text = Ui.DisplayMessage(ex), IsEnabled = false });
                         menu.ShowAt(anchor);
+                    }
+                    finally
+                    {
+                        QualityButton.IsEnabled = true;
+                        QualityLabel.Text = "Налады";
                     }
                 };
                 qualityMenu.Items.Add(item);
@@ -152,7 +168,7 @@ public sealed partial class PlayerHost : UserControl
         return string.IsNullOrWhiteSpace(language) ? name : $"{name} · {language}";
     }
 
-    private void AddTrackMenu(MenuFlyout menu, MpvEngine engine, string label,
+    private void AddTrackMenu(MenuFlyout menu, WindowsMediaEngine engine, string label,
         IEnumerable<(long Id, string Label)> tracks, long selected, Action<long> select)
     {
         var choices = tracks.ToArray();
@@ -181,17 +197,6 @@ public sealed partial class PlayerHost : UserControl
     public PlayerHost()
     {
         InitializeComponent();
-        _seekDebounce = DispatcherQueue.GetForCurrentThread().CreateTimer();
-        _seekDebounce.Interval = TimeSpan.FromMilliseconds(150);
-        _seekDebounce.IsRepeating = false;
-        _seekDebounce.Tick += (_, _) =>
-        {
-            if (_controller?.Engine is { IsInitialized: true })
-            {
-                _controller.Seek(SeekSlider.Value);
-            }
-            _userSeeking = false;
-        };
         _hideControls = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _hideControls.Interval = TimeSpan.FromSeconds(2.4);
         _hideControls.IsRepeating = false;
@@ -243,6 +248,7 @@ public sealed partial class PlayerHost : UserControl
             var surfaces = new PlayerSurfaces
             {
                 VideoPanel = VideoPanel,
+                SubtitleOverlay = SubtitleOverlay,
                 EmbedHost = EmbedSurface,
             };
             SetStatus(Strings.ResolvingSource);
@@ -323,7 +329,7 @@ public sealed partial class PlayerHost : UserControl
     public void Close()
     {
         _qualityMenu?.Hide();
-        _seekDebounce.Stop();
+        _controlsHovered = false;
         _hideControls.Stop();
         if (_controller is { } controller) { controller.Dispose(); _pendingClose = Task.WhenAll(_pendingClose, controller.ReportsCompleted); }
         _controller = null;
@@ -344,6 +350,11 @@ public sealed partial class PlayerHost : UserControl
         _controller.Ended += OnEngineEnded;
         _controller.PositionChanged += OnEnginePositionChanged;
         _controller.PauseChanged += OnEnginePauseChanged;
+        _controller.BufferingChanged += buffering =>
+        {
+            StatusText.Text = buffering ? "Буферызацыя…" : "";
+            SetBusy(buffering);
+        };
         _controller.Error += message => SetStatus(message, error: true);
     }
 
@@ -367,10 +378,11 @@ public sealed partial class PlayerHost : UserControl
         PlayPauseButton.IsEnabled =
             SeekBackButton.IsEnabled = SeekForwardButton.IsEnabled = native;
         SeekSlider.IsEnabled = native;
-        OnEnginePauseChanged((_controller?.Engine as MpvEngine)?.IsPaused ?? false);
+        OnEnginePauseChanged((_controller?.Engine as WindowsMediaEngine)?.IsPaused ?? false);
         if (!_mini)
         {
             ShowTheaterControls();
+            if (!IsEmbedded) Focus(FocusState.Programmatic);
         }
         if (VolumeSlider.Value == 100 && _controller?.Controls is { Volume: > 0 } controls)
         {
@@ -396,17 +408,17 @@ public sealed partial class PlayerHost : UserControl
     {
         ProgressChanged?.Invoke(this, (pos, dur));
         PositionText.Text = $"{FormatTime(pos)} / {FormatTime(dur)}";
-        if (dur > 0 && Math.Abs(_sliderDuration - dur) > 0.5)
+        _updatingSlider = true;
+        try
         {
-            _sliderDuration = dur;
-            SeekSlider.Maximum = dur;
-        }
-        if (!_userSeeking)
-        {
-            _updatingSlider = true;
+            if (dur > 0 && Math.Abs(_sliderDuration - dur) > 0.5)
+            {
+                _sliderDuration = dur;
+                SeekSlider.Maximum = dur;
+            }
             SeekSlider.Value = pos;
-            _updatingSlider = false;
         }
+        finally { _updatingSlider = false; }
     }
 
     private void OnPlayPauseClick(object sender, RoutedEventArgs e)
@@ -433,15 +445,12 @@ public sealed partial class PlayerHost : UserControl
 
     private void OnSeekValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        if (_updatingSlider || _controller?.Engine is not { IsInitialized: true } || !_seekDebounceCanSeek())
+        if (_updatingSlider || _controller?.Engine is not { IsInitialized: true } || !SeekSlider.IsEnabled || SeekSlider.Maximum <= 0)
         {
             return;
         }
-        _userSeeking = true;
-        _seekDebounce.Start();
+        _controller.Seek(e.NewValue);
     }
-
-    private bool _seekDebounceCanSeek() => SeekSlider.IsEnabled && SeekSlider.Maximum > 0;
 
     private void OnMuteClick(object sender, RoutedEventArgs e)
     {
@@ -481,6 +490,7 @@ public sealed partial class PlayerHost : UserControl
         {
             return;
         }
+        Focus(FocusState.Programmatic);
         OnPlayPauseClick(sender, e);
         ShowTheaterControls();
     }
@@ -532,7 +542,21 @@ public sealed partial class PlayerHost : UserControl
         BottomBar.Visibility = Visibility.Visible;
         _hideControls.Stop();
         _hideControls.Start();
-        if (!IsEmbedded) Focus(FocusState.Programmatic);
+    }
+
+    private void OnControlsPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _controlsHovered = true;
+        _hideControls.Stop();
+    }
+
+    private void OnControlsPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        var bar = (FrameworkElement)sender;
+        var point = e.GetCurrentPoint(bar).Position;
+        // A child button can raise PointerExited while the pointer is still over the bar.
+        _controlsHovered = point.X >= 0 && point.Y >= 0 && point.X < bar.ActualWidth && point.Y < bar.ActualHeight;
+        if (!_controlsHovered) _hideControls.Start();
     }
 
     private void HideControlsIfPlaying()
@@ -540,7 +564,7 @@ public sealed partial class PlayerHost : UserControl
         // Embedded pages consume pointer input. Keep navigation outside the page visible.
         if (IsEmbedded || _controller?.Engine is not { IsInitialized: true }) return;
         if (IsQualityMenuOpen) { _hideControls.Start(); return; }
-        if (_mini || _externalChrome || _userSeeking)
+        if (_mini || _externalChrome || _controlsHovered)
         {
             return;
         }
@@ -628,14 +652,7 @@ public sealed partial class PlayerHost : UserControl
         FullscreenIconBottom.Symbol = icon;
     }
 
-    private static string FormatTime(double seconds)
-    {
-        if (seconds <= 0 || double.IsNaN(seconds)) return "0:00";
-        var t = TimeSpan.FromSeconds(seconds);
-        return t.TotalHours >= 1
-            ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
-            : $"{t.Minutes}:{t.Seconds:00}";
-    }
+    private static string FormatTime(double seconds) => PlaybackTimeConverter.Format(seconds);
 
     private void SetBusy(bool busy)
     {

@@ -380,13 +380,13 @@ public class CatalogViewModelTests
     [Fact]
     public void Genre_and_country_use_belarusian_labels()
     {
-        Assert.Equal("баявік", Ui.Genre("боевик"));
+        Assert.Equal("экшн", Ui.Genre("боевик"));
         Assert.Equal("звышнатуральнае", Ui.Genre("сверхъестественное"));
         Assert.Equal("Японія", Ui.Country("Япония"));
         Assert.Equal("Японія", Ui.Country("Japan"));
         Assert.Equal("Анімэ", Ui.MediaType("anime"));
         Assert.Equal("Субцітры", Ui.Language("sub"));
-        Assert.Equal("Дубляж", Ui.Language("dub"));
+        Assert.Equal("Агучка", Ui.Language("dub"));
         Assert.Equal("tv-серыял", Ui.ContentType("tv"));
     }
 }
@@ -736,10 +736,10 @@ public class MediaCardDisplayTests
         Assert.Equal("Выпускаецца", CardDisplay.StatusLabel(card));
         Assert.True(CardDisplay.ShowSub(card));
         Assert.True(CardDisplay.ShowDub(card));
-        Assert.Equal("Субцітры · Дубляж", CardDisplay.LanguageLabel(card));
+        Assert.Equal("Субцітры · Агучка", CardDisplay.LanguageLabel(card));
         Assert.Contains("Выпускаецца", CardDisplay.InfoLine(card));
         Assert.Contains("Субцітры", CardDisplay.InfoLine(card));
-        Assert.Contains("Дубляж", CardDisplay.InfoLine(card));
+        Assert.Contains("Агучка", CardDisplay.InfoLine(card));
     }
 
     [Fact]
@@ -768,8 +768,8 @@ public class MediaCardDisplayTests
         Assert.False(CardDisplay.ShowSub(dub));
         Assert.True(CardDisplay.ShowDub(dub));
         Assert.Equal("Субцітры", CardDisplay.LanguageLabel(sub));
-        Assert.Equal("Дубляж", CardDisplay.LanguageLabel(dub));
-        Assert.Equal("эп. 12", CardDisplay.NumLabel(sub));
+        Assert.Equal("Агучка", CardDisplay.LanguageLabel(dub));
+        Assert.Equal("сер. 12", CardDisplay.NumLabel(sub));
         Assert.NotEqual(CardDisplay.InfoLine(sub), CardDisplay.InfoLine(dub));
     }
 

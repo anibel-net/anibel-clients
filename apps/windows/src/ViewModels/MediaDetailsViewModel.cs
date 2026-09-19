@@ -125,7 +125,7 @@ public partial class MediaDetailsViewModel : ObservableObject
     public async Task SetRatingAsync(int rating)
     {
         if (RatingSaving || Media is not { } media) return;
-        if (!_session.HasSession) { StatusMessage = "Увайдзіце, каб паставіць ацэнку"; return; }
+        if (!_session.HasSession) { StatusMessage = "Увайдзіце, каб паставіць адзнаку"; return; }
         var revision = _session.Revision;
         RatingSaving = true;
         StatusMessage = null;

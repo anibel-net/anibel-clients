@@ -54,6 +54,8 @@ pub(super) fn video_qualities(args: &Value) -> Result<Value> {
         .map(|t| {
             let label = if t.height > 0 {
                 format!("{}p", t.height)
+            } else if t.bitrate > 0 {
+                format!("{:.1} Mbit/s", t.bitrate as f64 / 1_000_000.0)
             } else {
                 format!("#{}", t.id)
             };

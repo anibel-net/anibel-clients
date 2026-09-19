@@ -90,6 +90,9 @@ public sealed partial class MainWindow : Window,
     public MainWindow()
     {
         InitializeComponent();
+        ApplyBackground();
+        GlobalSearch.AddHandler(UIElement.PointerPressedEvent,
+            new Microsoft.UI.Xaml.Input.PointerEventHandler(OnSearchPointerPressed), true);
         Activated += (_, _) => _shortcuts.Reset();
         WindowRoot.SizeChanged += (_, _) =>
         {
@@ -193,13 +196,38 @@ public sealed partial class MainWindow : Window,
         SetTitleBarVisible(true);
     }
 
+    internal void ApplyBackground()
+    {
+        var background = App.Services.GetRequiredService<SettingsService>().Background;
+        SystemBackdrop = background switch
+        {
+            WindowBackground.Mica when Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported()
+                => new Microsoft.UI.Xaml.Media.MicaBackdrop
+                {
+                    Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.BaseAlt,
+                },
+            WindowBackground.Acrylic when Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController.IsSupported()
+                => new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop(),
+            _ => null,
+        };
+        SolidBackground.Visibility = SystemBackdrop is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnSearchPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _focusSearchRequested = true;
+        try { GlobalSearch.Focus(FocusState.Pointer); }
+        finally { _focusSearchRequested = false; }
+    }
+
     private void OnSearchGettingFocus(UIElement sender, Microsoft.UI.Xaml.Input.GettingFocusEventArgs e)
     {
-        // Do not accept fallback focus from a control removed during navigation or refresh.
-        // Explicit search shortcuts, tab navigation, and clicks from live controls still work.
-        if (_focusSearchRequested || e.Direction != Microsoft.UI.Xaml.Input.FocusNavigationDirection.None
-            || e.OldFocusedElement is FrameworkElement { IsLoaded: true }) return;
-        if (RootFrame.Content is MainPage page)
+        // A closing player's controls can still be loaded when WinUI moves focus.
+        // Only explicit search input, keyboard traversal, or focus within search is allowed.
+        if (_focusSearchRequested || KeyboardNavigation.FocusIsWithin(GlobalSearch)
+            || (e.FocusState == FocusState.Keyboard && e.Direction is
+                Microsoft.UI.Xaml.Input.FocusNavigationDirection.Next or Microsoft.UI.Xaml.Input.FocusNavigationDirection.Previous)) return;
+        if (!e.TryCancel() && RootFrame.Content is MainPage page)
             e.TrySetNewFocusedElement(page.ContentFocusTarget);
     }
 

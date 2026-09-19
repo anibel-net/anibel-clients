@@ -3,12 +3,14 @@
     x:Class="Anibel.App.Playback.PipWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:playback="using:Anibel.App.Playback"
     Title="Anibel.Net">
     <Grid x:Name="Root" Background="Black"
           PointerEntered="OnRootPointerEntered"
           PointerMoved="OnRootPointerMoved"
           PointerExited="OnRootPointerExited"
           PointerPressed="OnRootPointerPressed" GotFocus="OnRootGotFocus">
+        <Grid.Resources><playback:PlaybackTimeConverter x:Key="PlaybackTimeConverter" /></Grid.Resources>
         <Grid x:Name="Host" />
 
         <Grid x:Name="Chrome" Opacity="0" IsHitTestVisible="False"
@@ -53,7 +55,7 @@
                 <SymbolIcon x:Name="PlayIcon" Symbol="Pause" Foreground="White" />
             </Button>
 
-            <Slider x:Name="SeekSlider" VerticalAlignment="Bottom" Margin="12,0,12,10"
+            <Slider x:Name="SeekSlider" ThumbToolTipValueConverter="{StaticResource PlaybackTimeConverter}" VerticalAlignment="Bottom" Margin="12,0,12,10"
                     Minimum="0" Maximum="100" StepFrequency="0.25"
                     ValueChanged="OnSeekChanged" />
         </Grid>

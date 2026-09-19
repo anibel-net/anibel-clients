@@ -8,11 +8,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Anibel.Net"
     mc:Ignorable="d">
-    <Window.SystemBackdrop>
-        <MicaBackdrop />
-    </Window.SystemBackdrop>
 
-    <Grid x:Name="WindowRoot" KeyDown="OnWindowKeyDown">
+    <Grid x:Name="WindowRoot" Background="Transparent" KeyDown="OnWindowKeyDown">
         <Grid.Resources>
             <views:StringToImageConverter x:Key="Img" />
             <views:BoolToVisibilityConverter x:Key="BoolVis" />
@@ -22,6 +19,9 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+
+        <Border x:Name="SolidBackground" Grid.RowSpan="2"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
 
         <!-- Microsoft Store-style title bar: branding | search | account | caption -->
         <Grid x:Name="AppTitleBar" Height="48" Padding="0">
@@ -35,7 +35,7 @@
 
             <StackPanel x:Name="BrandHost" Grid.Column="1" Orientation="Horizontal" Spacing="8"
                         VerticalAlignment="Center" Margin="8,0,4,0">
-                <Image Source="Assets/Logo.png" Width="16" Height="16" VerticalAlignment="Center" />
+                <Image Source="ms-appx:///Assets/Logo.png" Width="16" Height="16" VerticalAlignment="Center" />
                 <TextBlock x:Name="TitleText" Text="Anibel.Net"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            VerticalAlignment="Center" />

@@ -129,7 +129,7 @@
                          Margin="12,0,0,0" SelectionChanged="OnUpdateKindChanged">
                 <SelectorBarItem Text="Усе" Tag="ALL" />
                 <SelectorBarItem Text="Субцітры" Tag="SUB" />
-                <SelectorBarItem Text="Дубляж" Tag="DUB" />
+                <SelectorBarItem Text="Агучка" Tag="DUB" />
                 <SelectorBarItem Text="Кіно" Tag="CINEMA" />
                 <SelectorBarItem Text="Манга" Tag="MANGA" />
                 <SelectorBarItem Text="Гульні" Tag="GAMES" />
@@ -158,7 +158,7 @@
                               Message="{x:Bind Vm.StatusMessage, Mode=OneWay}"
                               Glyph="&#xE7BA;"
                               ActionText="Абнавіць"
-                              SecondaryText="Капіяваць"
+                              SecondaryText="Скапіяваць"
                               ActionClick="OnRefreshClick"
                               SecondaryClick="OnCopyStatusClick"
                               Visibility="{x:Bind Vm.ShowUpdatesError, Mode=OneWay, Converter={StaticResource BoolVis}}" />

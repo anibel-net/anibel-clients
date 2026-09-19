@@ -26,6 +26,7 @@ public sealed partial class SettingsPage : Page
 
         // populate BEFORE attaching the handler so restoring state never saves
         LanguageCombo.SelectedIndex = Math.Max(0, Array.IndexOf(LangKeys, _settings.Language));
+        BackgroundCombo.SelectedIndex = (int)_settings.Background;
         ApiUrlBox.Text = _settings.ApiBaseUrl;
         VideoApiUrlBox.Text = _settings.VideoBaseUrl;
         _initialized = true;
@@ -56,6 +57,14 @@ public sealed partial class SettingsPage : Page
         _settings.Language = LangKeys[Math.Max(0, LanguageCombo.SelectedIndex)];
         _settings.Save();
         ShowStatus(Strings.LanguageRestartNote);
+    }
+
+    private void OnBackgroundChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_initialized || BackgroundCombo.SelectedIndex < 0) return;
+        _settings.Background = (WindowBackground)BackgroundCombo.SelectedIndex;
+        _settings.Save();
+        if (App.CurrentWindow is MainWindow window) window.ApplyBackground();
     }
 
     private void OnSaveUrlsClick(object sender, RoutedEventArgs e)

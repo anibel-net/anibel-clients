@@ -6,7 +6,7 @@ namespace Anibel.App.Playback;
 /// Host playback engine. Core only resolves a <see cref="PlaybackIntentDto"/>;
 /// the engine owns native handles and host surfaces. Implementations that also
 /// expose transport/audio/subtitle controls implement <see cref="IPlaybackControls"/>
-/// as well (e.g. <see cref="MpvEngine"/>) — the embed engine deliberately does not.
+/// as well (e.g. <see cref="WindowsMediaEngine"/>) — the embed engine deliberately does not.
 /// </summary>
 public interface IPlayerEngine : IDisposable
 {

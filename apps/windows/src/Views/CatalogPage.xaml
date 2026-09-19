@@ -84,7 +84,7 @@
                 </StackPanel>
                 <ToggleButton Content="Дунхуа" IsChecked="{x:Bind Vm.ChinaSelected, Mode=TwoWay}" Visibility="{x:Bind Vm.ShowChinaFilter, Mode=OneWay, Converter={StaticResource BoolVis}}" />
                 <ComboBox MinWidth="140" AutomationProperties.Name="Статус" SelectedIndex="{x:Bind Vm.SelectedStatusIndex, Mode=TwoWay}" Visibility="{x:Bind Vm.ShowStatusFilter, Mode=OneWay, Converter={StaticResource BoolVis}}">
-                    <ComboBoxItem Content="Усе статусы" />
+                    <ComboBoxItem Content="Усе станы" />
                     <ComboBoxItem Content="Выпускаецца" />
                     <ComboBoxItem Content="Завершанае" />
                 </ComboBox>
@@ -142,7 +142,7 @@
                               Message="{x:Bind Vm.StatusMessage, Mode=OneWay}"
                               Glyph="&#xE7BA;"
                               ActionText="Абнавіць"
-                              SecondaryText="Капіяваць"
+                              SecondaryText="Скапіяваць"
                               ActionClick="OnRefreshClick"
                               SecondaryClick="OnCopyStatusClick"
                               Visibility="{x:Bind Vm.ShowErrorState, Mode=OneWay, Converter={StaticResource BoolVis}}" />

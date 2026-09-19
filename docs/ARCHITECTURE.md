@@ -77,7 +77,7 @@ Episode { id, episode, endEpisode?, title?, type: sub|dub, resource: 1|2, url, r
 | resolve record | `POST https://api.anibel.stream/video` (multipart `videoId`, **public**) | `title`, `meta{width,height,codec,duraction,…}`, `hls` (`/dash/<id>/manifest.m3u8`), `stream` (MPD), `host` (CDN node, e.g. `https://n3.anibel.stream`), `subtitles[]{path: <ass url>, fonts[]}`, `support{dub,sub}`, `episode/season/groupBy` |
 | font assets | `POST {videoApi}/fonts-by-names` `{fontNames:[…]}` (public) | direct `.ttf` URLs (`https://fonts.anibel.net/…`) for libass |
 
-The player page itself is an SPA (no HTML parsing possible/needed). Stream URL = `host + hls` (HLS master, mpv native). Dub tracks are *separate video records* (different episode `url`), not a separate audio file. Prior `video(videoId)` GraphQL query is dead on production.
+The player page itself is an SPA (no HTML parsing possible/needed). Stream URL = `host + hls` (HLS master, Windows native). Dub tracks are *separate video records* (different episode `url`), not a separate audio file. Prior `video(videoId)` GraphQL query is dead on production.
 
 ### 1.3 Auth
 
@@ -226,7 +226,7 @@ Events currently emitted (drained via `anibel_core_events`, ~30–60 ms poll fro
 | DI/lifecycle | `Microsoft.Extensions.Hosting` 10.x in `App.xaml.cs`, VMs resolved via DI |
 | Navigation | `NavigationView` shell + `Frame`; route model for deep links (`anibel://media/{slug}`, `anibel://episode/{id}`) |
 | Storage | JSON settings + token via `ProtectedData` (DPAPI) in `LocalApplicationData` |
-| Player surface | `SwapChainPanel` (libmpv D3D11, via **Vortice.Windows 3.8.3** → `Vortice.WinUI.ISwapChainPanelNative`) + `WebView2Control` |
+| Player surface | `MediaPlayerElement` + libass `Image` overlay + `WebView2` |
 | WebView2 | **Microsoft.Web.WebView2 1.0.4191.x** (evergreen runtime, WinUI 3 supported package) |
 | Tests | xUnit + mocking of `ICoreClient` |
 
@@ -268,16 +268,20 @@ Core contract in C#: `AnibelCoreNative` (DllImport) + `CoreClient` mapping ops �
 
 | Engine | Use case | Pros | Cons |
 |---|---|---|---|
-| **Mpv (libmpv) — default** | resource 2 (Anibel-hosted sources) | libass + ASS fonts, HLS/DASH/MP4 all native, quality switching, auto next-episode | needs patched libmpv build + `SwapChainPanel`↔swapchain interop (ref: ikas-mc/mpv-winui-player — confirmed pattern) |
-| WebView2 | resource 1 (Google Drive embeds), OAuth, future «open on site» | zero codec work, matches site behavior exactly | not native, no libass speed benefits, heavier |
-| MF `MediaPlayerElement` — *not planned* | quick MVP fallback only | trivial WinUI | no ASS, weak HLS/DASH → fails the sub pipeline goal |
+| **Windows MediaPlayer + libass — default** | resource 2 and offline MKV | Windows H.264/AAC codecs, native HLS/DASH, shared timeline for separate audio, libass styles/fonts | other codecs depend on installed Windows support |
+| WebView2 | resource 1 (Google Drive embeds) | uses the service embed | embed controls remain service-owned |
 
-MPV interop (Windows — **implemented, verified pattern Aug 2026**): vanilla upstream libmpv has **no D3D11 embed path** (issue mpv#5979 open). The WinUI3 pattern uses the **patched mpv build** from `zhongfly/mpv-winbuild` (fetched via `scripts/fetch-mpv.ps1` → `Assets/libmpv/x64/libmpv-2.dll`):
+`WindowsMediaEngine` attaches a Windows MediaPlayer to a WinUI MediaPlayerElement.
+A MediaTimelineController synchronizes video and optional separate audio. The
+existing player controls set the timeline position/state and media track indices.
+AdaptiveMediaSource exposes bitrate choices; Auto clears the requested bounds.
 
-- options: `gpu-api=d3d11`, `d3d11-output-mode=composition`, `d3d11-composition-size=WxH` (resize on panel `SizeChanged`), `force-window=yes`, `auto-window-resize=no`, `hwdec=d3d11va`
-- swapchain: after `VO configured` read property **`display-swapchain`** (MPV_FORMAT_INT64 → `IDXGISwapChain*`) and bind to `SwapChainPanel` via `ISwapChainPanelNative::SetSwapChain` (custom P/Invoke `63aad0b8-7c24-40ff-85a8-640d944cc325` — no Vortice needed)
-- bindings: `core`-style P/Invoke (`Playback/MpvNative.cs`): `mpv_create/initialize/terminate_destroy/set_option_string/get_property/command/observe_property/wait_event/wakeup`; event thread loop with 1s `mpv_wait_event`
-- subtitles: `sub-add` per `.ass` track (cached locally), `sid 1` default; fonts: `.ttf` files into the engine work dir `fonts/` (libass picks them up)
+`AssRenderer` uses libass with DirectWrite font discovery and downloaded fonts.
+The overlay blends libass masks into a premultiplied BGRA WriteableBitmap only
+when the subtitle frame changes. It follows the fitted video rectangle through
+resizes and PiP transfers. Rendering is bounded to 3840 by 2160 pixels.
+`NativeSubtitleAssets` extracts offline MKV text subtitles and font attachments
+with the small FFmpeg tools; temporary files are removed after playback closes.
 
 ### 6.2 Playback data flow (resource 2)
 
@@ -293,9 +297,9 @@ C# PlayerController
   │         fonts:     [{ family, url }],
   │         durationSecs, videoId, kind: native | embed
   │       }
-  ├─ IPlayerEngine.Load(intent)  // MpvEngine | WebView2Engine
+  ├─ IPlayerEngine.Load(intent)  // WindowsMediaEngine | WebView2Engine
   │    ├─ download fonts[] → local font dir (cache)
-  │    ├─ mpv: file=<videoSrc> (HLS master), sub-file=<sub url>
+  │    ├─ MediaPlayer: videoSrc (HLS/DASH/file), shared audio timeline
   │    ├─ libass: font dir + ASS styles
   │    └─ engine.ReadPosition/SetPosition/Rate/Quality
   └─ on position updates: throttled save; auto addHistoryRecord on play/end
@@ -303,9 +307,9 @@ C# PlayerController
 
 ### 6.3 Subtitle policy
 
-- `subtitles[].path` ASS → libass via mpv (default renderer; secondary tracks selectable)
-- Remote fonts (`fonts-by-names` → `fonts.anibel.net/*.ttf`) → downloaded once into `localsettings/fonts/<hash>.ttf` and registered with mpv/libass (exact loading mechanism verified in M3 spike — mpv fontconfig/dir loading)
-- User prefs: subs on/off, size scale, position (mpv `sub-*` props) — host-side only
+- `subtitles[].path` ASS → libass overlay (tracks selectable)
+- Remote fonts (`fonts-by-names` → `fonts.anibel.net/*.ttf`) → downloaded once into `localsettings/fonts/<hash>.ttf` and loaded by libass through its fonts directory
+- Subtitle on/off and track selection stay host-side; ASS styles and positions come from the subtitle file.
 
 ---
 

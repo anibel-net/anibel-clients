@@ -237,37 +237,51 @@ pub(super) async fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Fixture generation needs encoders that the shipped remux-only build omits.
+    fn fixture_ffmpeg() -> Command {
+        std::env::var_os("ANIBEL_TEST_FFMPEG")
+            .map(Command::new)
+            .unwrap_or_else(|| command("ffmpeg"))
+    }
     #[tokio::test]
     #[ignore = "requires host ffmpeg"]
     async fn cancellation_stops_output_before_returning() {
         let dir = tempfile::tempdir().unwrap();
         let output = dir.path().join("cancel.mkv");
+        let input = dir.path().join("input.mkv");
+        assert!(fixture_ffmpeg()
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x64:rate=30",
+                "-t",
+                "1",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p"
+            ])
+            .arg(&input)
+            .status()
+            .unwrap()
+            .success());
         let mut cmd = command("ffmpeg");
-        cmd.args([
-            "-v",
-            "error",
-            "-y",
-            "-re",
-            "-f",
-            "lavfi",
-            "-i",
-            "testsrc=size=64x64:rate=30",
-            "-c:v",
-            "ffv1",
-            "-flush_packets",
-            "1",
-        ])
-        .arg(&output)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-        assert!(
-            tokio::time::timeout(
-                Duration::from_secs(2),
-                run(cmd, &output, MAX_JOB_BYTES, &|_| {})
-            )
-            .await
-            .is_err()
-        );
+        cmd.args(["-v", "error", "-y", "-re", "-stream_loop", "-1", "-i"])
+            .arg(&input)
+            .args(["-c", "copy", "-flush_packets", "1"])
+            .arg(&output)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        assert!(tokio::time::timeout(
+            Duration::from_secs(2),
+            run(cmd, &output, MAX_JOB_BYTES, &|_| {})
+        )
+        .await
+        .is_err());
         let length = output.metadata().unwrap().len();
         assert!(length > 0);
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -280,7 +294,7 @@ mod tests {
     async fn mkv_contains_all_audio_subtitles_and_fonts() {
         let dir = tempfile::tempdir().unwrap();
         let input = dir.path().join("input.mkv");
-        let status = command("ffmpeg")
+        let status = fixture_ffmpeg()
             .args([
                 "-v",
                 "error",
@@ -318,7 +332,7 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let subtitles: Vec<String> = ["dialogue.srt", "signs.srt"]
+        let mut subtitles: Vec<String> = ["dialogue.srt", "signs.srt"]
             .iter()
             .map(|name| {
                 let path = dir.path().join(name);
@@ -326,12 +340,32 @@ mod tests {
                 path.to_string_lossy().into_owned()
             })
             .collect();
+        let ass = dir.path().join("sub-2-Знакі.ass");
+        std::fs::write(&ass, concat!(
+            "[Script Info]\nScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\n",
+            "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n",
+            "Style: Default,FixtureFont,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n",
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
+            "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\pos(120,80)}Знакі\n"
+        )).unwrap();
+        subtitles.push(ass.to_string_lossy().into_owned());
+        let mp4 = dir.path().join("subtitled.mp4");
+        assert!(fixture_ffmpeg()
+            .args(["-v", "error", "-y", "-i"])
+            .arg(&input)
+            .arg("-i")
+            .arg(&subtitles[0])
+            .args(["-map", "0", "-map", "1", "-c", "copy", "-c:s", "mov_text"])
+            .arg(&mp4)
+            .status()
+            .unwrap()
+            .success());
         let font = dir.path().join("font.ttf");
         std::fs::write(&font, b"attachment fixture").unwrap();
         let hls = dir.path().join("stream.m3u8");
         let dash = dir.path().join("stream.mpd");
         for target in [&hls, &dash] {
-            let status = command("ffmpeg")
+            let status = fixture_ffmpeg()
                 .current_dir(dir.path())
                 .args(["-v", "error", "-y", "-i"])
                 .arg(&input)
@@ -359,6 +393,7 @@ mod tests {
             input.to_string_lossy().into_owned(),
             server.url("/stream.m3u8"),
             server.url("/stream.mpd"),
+            mp4.to_string_lossy().into_owned(),
         ];
         for (index, source) in sources.iter().enumerate() {
             let output = dir.path().join(format!("output-{index}.mkv"));
@@ -384,7 +419,7 @@ mod tests {
             for (kind, expected) in [
                 ("video", 1),
                 ("audio", 2),
-                ("subtitle", 2),
+                ("subtitle", if index == 3 { 4 } else { 3 }),
                 ("attachment", 1),
             ] {
                 assert_eq!(
@@ -398,6 +433,18 @@ mod tests {
                 .map(|s| s["tags"]["language"].as_str().unwrap())
                 .collect();
             assert_eq!(languages, ["jpn", "bel"]);
+            assert!(streams
+                .iter()
+                .any(|s| s["codec_name"] == "ass" && s["tags"]["title"] == "Знакі"));
+            if index == 3 {
+                assert_eq!(
+                    streams
+                        .iter()
+                        .filter(|s| s["codec_name"] == "mov_text")
+                        .count(),
+                    0
+                );
+            }
         }
     }
 

@@ -124,7 +124,7 @@
                                          Message="{x:Bind Error, Mode=OneWay}"
                                          Visibility="{x:Bind IsFailed, Mode=OneWay, Converter={StaticResource BoolVis}}">
                                     <InfoBar.ActionButton>
-                                        <Button Content="Капіяваць" Tag="{x:Bind Error, Mode=OneWay}"
+                                        <Button Content="Скапіяваць" Tag="{x:Bind Error, Mode=OneWay}"
                                                 Click="OnCopyErrorClick" />
                                     </InfoBar.ActionButton>
                                 </InfoBar>
@@ -136,7 +136,7 @@
                                             Visibility="{x:Bind CanPlay, Mode=OneWay, Converter={StaticResource BoolVis}}" />
                                     <Button Content="Захаваць файл" Tag="{x:Bind}" Click="OnSaveClick"
                                             Visibility="{x:Bind CanSave, Mode=OneWay, Converter={StaticResource BoolVis}}" />
-                                    <Button Content="Адмяніць" Tag="{x:Bind}" Click="OnCancelClick"
+                                    <Button Content="Скасаваць" Tag="{x:Bind}" Click="OnCancelClick"
                                             Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource BoolVis}}" />
                                     <Button Content="Паўтарыць" Tag="{x:Bind}" Click="OnRetryClick"
                                             Visibility="{x:Bind CanRetry, Mode=OneWay, Converter={StaticResource BoolVis}}" />
@@ -152,7 +152,7 @@
             </ListView>
 
             <local:EmptyState Title="Няма спамповак"
-                              Message="Спампуйце эпізоды, аўдыё або главы мангі са старонкі тайтла. Гэтая старонка працуе без інтэрнэту."
+                              Message="Спампуйце серыі, аўдыё або главы мангі са старонкі тайтла. Гэтая старонка працуе без інтэрнэту."
                               Glyph="&#xE896;"
                               Visibility="{x:Bind Vm.IsEmpty, Mode=OneWay, Converter={StaticResource BoolVis}}" />
         </Grid>

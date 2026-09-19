@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 internal static class Program
 {
-    private const string AppExe = @"apps\windows\src\bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\Anibel.App.exe";
+    private const string AppExe = @"apps\windows\src\bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\Anibel.Net.exe";
 
     private static int _pass;
     private static int _fail;

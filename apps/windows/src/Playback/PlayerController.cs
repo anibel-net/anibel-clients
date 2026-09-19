@@ -5,10 +5,11 @@ namespace Anibel.App.Playback;
 
 public sealed class PlayerSurfaces
 {
-    public required SwapChainPanel VideoPanel
+    public required MediaPlayerElement VideoPanel
     {
         get; init;
     }
+    public required Image SubtitleOverlay { get; init; }
     public required Panel EmbedHost
     {
         get; init;
@@ -33,6 +34,7 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
     public event Action<string>? Error;
     public event Action<double, double>? PositionChanged;
     public event Action<bool>? PauseChanged;
+    public event Action<bool>? BufferingChanged;
     public IPlayerEngine? Engine => _engine;
     public IPlaybackControls? Controls => _engine as IPlaybackControls;
     public PlaybackIntentDto? Intent
@@ -90,13 +92,8 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
             engine = new WebView2Engine(surfaces.EmbedHost);
         else
         {
-            var mpv = new MpvEngine(core);
-            mpv.PreferDubAudio(opened.PreferDub);
-            _engine = mpv;
-            mpv.Initialize(surfaces.VideoPanel, opened.ConfigDirectory,
-                (uint)Math.Clamp(surfaces.VideoPanel.ActualWidth, 1, uint.MaxValue),
-                (uint)Math.Clamp(surfaces.VideoPanel.ActualHeight, 1, uint.MaxValue));
-            engine = mpv;
+            engine = new WindowsMediaEngine(core, surfaces.VideoPanel, surfaces.SubtitleOverlay,
+                opened.ConfigDirectory, opened.PreferDub);
         }
         _engine = engine;
         Wire(engine);
@@ -109,6 +106,7 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
         engine.Error += OnError;
         engine.PositionChanged += OnPosition;
         engine.PauseChanged += OnPause;
+        if (engine is WindowsMediaEngine native) native.BufferingChanged += OnBuffering;
     }
     private void Unwire(IPlayerEngine engine)
     {
@@ -117,6 +115,7 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
         engine.Error -= OnError;
         engine.PositionChanged -= OnPosition;
         engine.PauseChanged -= OnPause;
+        if (engine is WindowsMediaEngine native) native.BufferingChanged -= OnBuffering;
     }
     private void OnReady()
     {
@@ -135,6 +134,7 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
     }
     private void OnError(string error) => Error?.Invoke(error);
     private void OnPause(bool paused) => PauseChanged?.Invoke(paused);
+    private void OnBuffering(bool buffering) => BufferingChanged?.Invoke(buffering);
     private void QueueReport(string kind, double? position = null, double? duration = null)
     {
         if (_sessionId == 0)

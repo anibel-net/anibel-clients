@@ -81,7 +81,7 @@
                             </Border>
                             <Border Style="{StaticResource PosterBadge}"
                                     Visibility="{x:Bind Converter={StaticResource CardShowDub}}">
-                                <FontIcon Glyph="&#xE720;" FontSize="14" Foreground="White" ToolTipService.ToolTip="Дубляж" AutomationProperties.Name="Дубляж" />
+                                <FontIcon Glyph="&#xE720;" FontSize="14" Foreground="White" ToolTipService.ToolTip="Агучка" AutomationProperties.Name="Агучка" />
                             </Border>
                         </StackPanel>
                         <Border Style="{StaticResource PosterBadge}"

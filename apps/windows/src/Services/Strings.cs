@@ -21,29 +21,29 @@ public static class Strings
 
     // --- media details header ---
     public const string NoSuchTitle = "Няма такога тайтла.";
-    public const string LoginToComment = "Каб пакінуць каментар, увайдзіце ў профіль.";
+    public const string LoginToComment = "Каб пакінуць каментарый, увайдзіце ў профіль.";
     public const string Chapters = "Главы";
-    public const string WriteCommentPlaceholder = "Напісаць каментар…";
+    public const string WriteCommentPlaceholder = "Напішыце каментарый…";
     public static string ReplyPlaceholder(string username) => $"Адказ @{username}…";
     public static string ReplyLabel(string username) => $"Адказ @{username}";
     public const string FranchiseFallback = "Іншыя часткі франшызы";
     public static string Rating(double value) => $"Рэйтынг: {RatingDisplay.Stars(value):0.0}";
 
     // --- episode kind bar ---
-    public const string KindDub = "Дубляж";
+    public const string KindDub = "Агучка";
     public const string KindSub = "Субцітры";
     public const string KindOther = "Іншае";
 
     // --- user mark choices ---
-    public const string MarkNotSelected = "Не адзначана";
-    public const string MarkWatching = "Гляджу";
-    public const string MarkWatched = "Прагледжана";
-    public const string MarkDropped = "Кінуў";
-    public const string MarkPlanned = "Запланавана";
-    public const string MarkReading = "Чытаю";
+    public const string MarkNotSelected = "Няма пазнакі";
+    public const string MarkWatching = "Праглядаецца";
+    public const string MarkWatched = "Прагледжанае";
+    public const string MarkDropped = "Закінутае";
+    public const string MarkPlanned = "Запланаванае";
+    public const string MarkReading = "Чытаецца";
     public const string MarkRead = "Прачытана";
-    public const string MarkPlaying = "Гуляю";
-    public const string MarkPlayed = "Прайграна";
+    public const string MarkPlaying = "Праходжу";
+    public const string MarkPlayed = "Пройдзена";
 
     // --- episode resource filter ---
     public const string AllSources = "Усе крыніцы";
@@ -51,11 +51,11 @@ public static class Strings
     public const string ResourceAnibelPlayer = "2 — Anibel Player";
 
     // --- downloads: queued notes ---
-    public const string EpisodeAddedToDownloads = "Эпізод дададзены ў спампоўкі.";
+    public const string EpisodeAddedToDownloads = "Серыя дададзена ў спампоўкі.";
     public const string AudioAddedToDownloads = "Аўдыё дададзена ў спампоўкі.";
     public const string ChapterAddedToDownloads = "Глава дададзена ў спампоўкі.";
     public const string FileAddedToDownloads = "Файл дададзены ў спампоўкі.";
-    public const string NoEpisodesToDownload = "Няма эпізодаў для спампоўкі.";
+    public const string NoEpisodesToDownload = "Няма серый для спампоўкі.";
     public const string NoChaptersToDownload = "Няма глаў для спампоўкі.";
     public static string QueueAdded(int count) =>
         $"У чаргу дададзена: {count}. Прагрэс — на старонцы «Спампаванае».";
@@ -86,13 +86,13 @@ public static class Strings
     public const string NoPagesTitle = "Няма старонак";
     public const string NoPagesMessage = "Гэта глава яшчэ без старонак.";
     public const string Sorry = "Прабачце!";
-    public const string Copy = "Капіяваць";
+    public const string Copy = "Скапіяваць";
 
     // --- player ---
-    public const string Episode = "Эпізод";
-    public static string EpisodeSuffix(string label) => $" · эпізод {label}";
+    public const string Episode = "Серыя";
+    public static string EpisodeSuffix(string label) => $" · серыя {label}";
     public const string OpeningLocalFile = "Адкрываем спампаваны файл…";
-    public const string ResolvingSource = "Раздагадваем крыніцу…";
+    public const string ResolvingSource = "Вызначаем крыніцу…";
 
     // --- catalog ---
     public const string NothingFound = "Нічога не знойдзена";
@@ -110,20 +110,20 @@ public static class Strings
     // --- profile ---
     public const string Profile = "Профіль";
     public static string RecordsCount(long count) => count == 1 ? "1 запіс" : $"{count} запісаў";
-    public const string TabFavorites = "Закладкі";
-    public const string TabWatching = "Гляджу";
-    public const string TabWatched = "Прагледжана";
-    public const string TabPlanned = "Запланавана";
-    public const string TabDropped = "Кінуў";
+    public const string TabFavorites = "Абранае";
+    public const string TabWatching = "Праглядаецца";
+    public const string TabWatched = "Прагледжанае";
+    public const string TabPlanned = "Запланаванае";
+    public const string TabDropped = "Закінутае";
     public const string LoginToSeeList = "Увайдзіце, каб бачыць спіс.";
     public const string EmptyList = "Спіс пусты";
 
     // --- auth ---
-    public const string EnterLoginAndPassword = "Увядзіце лагін і пароль.";
+    public const string EnterLoginAndPassword = "Увядзіце імя карыстальніка або пошту і пароль.";
     public const string NoTokenTryAgain = "Сервер не вярнуў токен — паспрабуйце яшчэ раз.";
 
     // --- settings ---
-    public const string LanguageRestartNote = "Мова застосуется пасля перазапуску";
+    public const string LanguageRestartNote = "Мова зменіцца пасля перазапуску";
     public const string UrlsSaved = "Адрасы захаваны — перазапусціце праграму";
     public const string CacheCleared = "Кэш ачышчаны";
     public const string CatalogCacheCleared = "Кэш каталога ачышчаны";
@@ -141,7 +141,7 @@ public static class Strings
     public const string EmptyStateDefault = "Тут пакуль пуста";
     public static string NumChapters(string number) => $"гл. {number}";
     public static string NumGame(string number) => $"№ {number}";
-    public static string NumEpisode(string number) => $"эп. {number}";
-    public static string EpisodeTitle(string number) => $"Эпізод {number}";
+    public static string NumEpisode(string number) => $"сер. {number}";
+    public static string EpisodeTitle(string number) => $"Серыя {number}";
     public static string ChapterTitle(string number) => $"Глава {number}";
 }

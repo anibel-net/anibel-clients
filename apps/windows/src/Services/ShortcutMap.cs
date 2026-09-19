@@ -18,7 +18,7 @@ internal sealed class ShortcutMap
         new(VirtualKey.Left, VirtualKeyModifiers.Menu, false, ShortcutAction.Back, "Alt + ←", "Назад"),
         new(VirtualKey.J, 0, false, ShortcutAction.FocusCards, "j", "Наступны тайтл"),
         new(VirtualKey.K, 0, false, ShortcutAction.FocusCards, "k", "Папярэдні тайтл"),
-        new(VirtualKey.H, 0, true, ShortcutAction.Navigate, "g → h", "Главная", "home"),
+        new(VirtualKey.H, 0, true, ShortcutAction.Navigate, "g → h", "Галоўная", "home"),
         new(VirtualKey.E, 0, true, ShortcutAction.Navigate, "g → e", "Пошук", "search"),
         new(VirtualKey.A, 0, true, ShortcutAction.Navigate, "g → a", "Анімэ", "anime"),
         new(VirtualKey.M, 0, true, ShortcutAction.Navigate, "g → m", "Манга", "manga"),

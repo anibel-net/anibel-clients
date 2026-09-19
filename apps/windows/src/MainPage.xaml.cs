@@ -221,6 +221,7 @@ public sealed partial class MainPage : Page,
         if (ReferenceEquals(title.Host.Parent, PlayerLayer))
         {
             ExitInAppFullscreen();
+            ContentFrame.Focus(FocusState.Programmatic);
         }
         CloseWindow(title);
         if (title.Host.Parent is Panel parent) parent.Children.Remove(title.Host);

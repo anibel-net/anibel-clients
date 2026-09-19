@@ -3,6 +3,7 @@
     x:Class="Anibel.App.Playback.PlayerHost"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:playback="using:Anibel.App.Playback"
     xmlns:views="using:Anibel.App.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -10,6 +11,7 @@
     IsTabStop="True">
 
     <UserControl.Resources>
+        <playback:PlaybackTimeConverter x:Key="PlaybackTimeConverter" />
         <SolidColorBrush x:Key="MiniStroke" Color="#33FFFFFF" />
         <Style x:Key="MediaBtn" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
@@ -80,10 +82,11 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <SwapChainPanel x:Name="VideoPanel" Grid.RowSpan="3"
+            <MediaPlayerElement x:Name="VideoPanel" Grid.RowSpan="3" AreTransportControlsEnabled="False" Stretch="Uniform" IsHitTestVisible="False"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             SizeChanged="OnSurfaceSizeChanged" />
+            <Image x:Name="SubtitleOverlay" Grid.RowSpan="3" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" />
             <Grid x:Name="EmbedSurface" Grid.Row="1" />
 
             <StackPanel x:Name="Overlay" Grid.RowSpan="3" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -98,13 +101,13 @@
                                   Title="Прабачце!"
                                   Glyph="&#xE7BA;"
                                   ActionText="Паўтарыць"
-                                  SecondaryText="Капіяваць"
+                                  SecondaryText="Скапіяваць"
                                   ActionClick="OnRetryErrorClick"
                                   SecondaryClick="OnCopyErrorClick" />
             </Grid>
 
             <!-- Media information and close action. Playback controls stay below. -->
-            <Grid x:Name="TopBar" VerticalAlignment="Top" Padding="16,12,16,28" ColumnSpacing="12">
+            <Grid x:Name="TopBar" PointerEntered="OnControlsPointerEntered" PointerExited="OnControlsPointerExited" VerticalAlignment="Top" Padding="16,12,16,28" ColumnSpacing="12">
                 <Grid.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#CC000000" Offset="0" />
@@ -128,7 +131,7 @@
             </Grid>
 
             <!-- Bottom overlay: seek + transport, YouTube-style -->
-            <Grid x:Name="BottomBar" Grid.Row="2" VerticalAlignment="Bottom" Padding="16,32,16,12" RowSpacing="0">
+            <Grid x:Name="BottomBar" PointerEntered="OnControlsPointerEntered" PointerExited="OnControlsPointerExited" Grid.Row="2" VerticalAlignment="Bottom" Padding="16,32,16,12" RowSpacing="0">
                 <Grid.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#00000000" Offset="0" />
@@ -139,7 +142,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <Slider x:Name="SeekSlider" Style="{StaticResource MediaSeek}"
+                <Slider x:Name="SeekSlider" ThumbToolTipValueConverter="{StaticResource PlaybackTimeConverter}" Style="{StaticResource MediaSeek}"
                         Maximum="100" IsEnabled="False" ValueChanged="OnSeekValueChanged" />
                 <Grid Grid.Row="1" ColumnSpacing="4" Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>

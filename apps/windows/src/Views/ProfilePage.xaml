@@ -23,13 +23,13 @@
                         <TextBlock Text="Увайсці ў Anibel.Net"
                                    Style="{StaticResource SubtitleTextBlockStyle}"
                                    HorizontalAlignment="Center" />
-                        <TextBlock Text="Закладкі і спісы даступныя пасля ўваходу"
+                        <TextBlock Text="Абранае і спісы даступныя пасля ўваходу"
                                    Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    HorizontalAlignment="Center" TextWrapping="Wrap"
                                    TextAlignment="Center" />
                     </StackPanel>
-                    <TextBox x:Name="UsernameBox" Header="Лагін"
+                    <TextBox x:Name="UsernameBox" Header="Імя карыстальніка або пошта"
                              PlaceholderText="username"
                              KeyDown="OnLoginKeyDown" />
                     <PasswordBox x:Name="PasswordBox" Header="Пароль"
@@ -44,7 +44,7 @@
                     <local:EmptyState x:Name="LoginErrorState"
                                       Title="Прабачце!"
                                       Glyph="&#xE7BA;"
-                                      SecondaryText="Капіяваць"
+                                      SecondaryText="Скапіяваць"
                                       SecondaryClick="OnCopyLoginErrorClick"
                                       Visibility="Collapsed" />
                 </StackPanel>
@@ -95,11 +95,11 @@
 
             <SelectorBar x:Name="ProfileBar" Grid.Row="1" SelectionChanged="OnProfileBarChanged">
                 <SelectorBarItem Text="Агляд" Tag="hub" IsSelected="True" />
-                <SelectorBarItem Text="Закладкі" Tag="favorites" />
-                <SelectorBarItem Text="Гляджу" Tag="inprogress" />
-                <SelectorBarItem Text="Прагледжана" Tag="done" />
-                <SelectorBarItem Text="Запланавана" Tag="planned" />
-                <SelectorBarItem Text="Кінуў" Tag="dropped" />
+                <SelectorBarItem Text="Абранае" Tag="favorites" />
+                <SelectorBarItem Text="Праглядаецца" Tag="inprogress" />
+                <SelectorBarItem Text="Прагледжанае" Tag="done" />
+                <SelectorBarItem Text="Запланаванае" Tag="planned" />
+                <SelectorBarItem Text="Закінутае" Tag="dropped" />
             </SelectorBar>
 
             <Grid x:Name="PersonalContent" Grid.Row="2">
@@ -109,7 +109,7 @@
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
                                 <FontIcon Glyph="&#xE734;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Grid.Column="1" Text="Закладкі" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Абранае" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" x:Name="FavCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
                             </Grid>
@@ -118,7 +118,7 @@
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
                                 <FontIcon Glyph="&#xE768;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Grid.Column="1" Text="Гляджу / чытаю" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Праглядаецца / чытаецца" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" x:Name="WatchCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
                             </Grid>
@@ -127,7 +127,7 @@
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
                                 <FontIcon Glyph="&#xE73E;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Grid.Column="1" Text="Прагледжана" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Прагледжанае" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" x:Name="DoneCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
                             </Grid>
@@ -136,7 +136,7 @@
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
                                 <FontIcon Glyph="&#xE823;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Grid.Column="1" Text="Запланавана" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Запланаванае" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" x:Name="PlanCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
                             </Grid>
@@ -145,7 +145,7 @@
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
                                 <FontIcon Glyph="&#xE711;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <TextBlock Grid.Column="1" Text="Кінуў" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Закінутае" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" x:Name="DropCountText" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <FontIcon Grid.Column="3" Glyph="&#xE76C;" FontSize="12" />
                             </Grid>

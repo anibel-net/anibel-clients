@@ -111,7 +111,7 @@ public class PlayerControllerTests
         using var controller = new PlayerController(core);
         var opening = controller.StartAsync("test", "episode", new PlayerSurfaces
         {
-            VideoPanel = null!, EmbedHost = null!
+            VideoPanel = null!, SubtitleOverlay = null!, EmbedHost = null!
         });
         controller.Dispose();
         var closing = controller.ReportsCompleted;

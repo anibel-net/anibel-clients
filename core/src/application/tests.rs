@@ -20,6 +20,8 @@ fn quality_choices_use_real_video_tracks_and_reject_stale_selection() {
     assert_eq!(result["choices"][0]["label"], "1080p · h264");
     assert_eq!(result["choices"][0]["selected"], true);
     assert_eq!(result["choices"][1]["id"], 3);
+    let unknown = presentation_data::video_qualities(&json!({"tracks":[{"id":2400000,"bitrate":2400000}]})).unwrap();
+    assert_eq!(unknown["choices"][0]["label"], "2.4 Mbit/s");
     for selected in [json!(99), json!(4), json!("3")] {
         let mut invalid = args.clone();
         invalid["select"] = selected;

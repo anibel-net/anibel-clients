@@ -4,6 +4,7 @@
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>Anibel.App</RootNamespace>
+    <AssemblyName>Anibel.Net</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
@@ -18,6 +19,7 @@
          (release) switch WindowsPackageType back and use win-x64.pubxml. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <OptimizeDistribution Condition="'$(OptimizeDistribution)' == ''">true</OptimizeDistribution>
     <!-- scripts/build-core.ps1 always emits target\release\anibel_core.dll -->
     <AnibelCoreDll>..\..\..\target\release\anibel_core.dll</AnibelCoreDll>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
@@ -36,6 +38,8 @@
     <Content Include="Assets\AppIcon.ico" />
     <Content Include="Assets\Logo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Update="Assets\*.png;Assets\*.ico"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -61,7 +65,9 @@
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" Condition="'$(OptimizeDistribution)' != 'true'" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" Condition="'$(OptimizeDistribution)' == 'true'" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.6" Condition="'$(OptimizeDistribution)' == 'true'" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.6.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
@@ -69,18 +75,23 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
 
-  <Target Name="CopyAnibelCore" AfterTargets="Build">
-    <Copy SourceFiles="$(AnibelCoreDll)" DestinationFolder="$(OutDir)" Condition="Exists('$(AnibelCoreDll)')" SkipUnchangedFiles="false" />
-  </Target>
-  <ItemGroup Condition="'$(Platform)' == 'x64'">
-    <Content Include="Assets\ffmpeg\x64\*.exe" Link="%(Filename)%(Extension)"
+  <ItemGroup Condition="Exists('$(AnibelCoreDll)')">
+    <Content Include="$(AnibelCoreDll)" Link="anibel_core.dll"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <!-- libmpv is x64-only; copying it into x86/ARM64 outputs would produce
-       a build that loads a wrong-architecture DLL at startup -->
-  <Target Name="CopyMpv" AfterTargets="Build" Condition="'$(Platform)' == 'x64'">
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Assets\libmpv\x64\libmpv-2.dll" DestinationFolder="$(OutDir)" Condition="Exists('$(MSBuildThisFileDirectory)Assets\libmpv\x64\libmpv-2.dll')" SkipUnchangedFiles="true" />
-  </Target>
+  <ItemGroup Condition="'$(Platform)' == 'x64'">
+    <Content Include="Assets\ffmpeg\x64\*.exe;Assets\ffmpeg\x64\*.dll" Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\ffmpeg\x64\licenses\**\*" Link="licenses\ffmpeg\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Platform)' == 'x64'">
+    <!-- These three libraries are already shipped with the FFmpeg runtime. -->
+    <Content Include="Assets\libass\x64\*.dll" Exclude="Assets\libass\x64\libiconv-2.dll;Assets\libass\x64\libwinpthread-1.dll;Assets\libass\x64\zlib1.dll" Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\libass\x64\licenses\**\*" Link="licenses\libass\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
@@ -91,12 +102,31 @@
     <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
   </PropertyGroup>
 
-  <!-- Publish Properties. NOTE: PublishTrimmed stays OFF — WinUI 3 XAML +
-       reflection + native FFI break under IL trimming without extensive
-       Rd.xml work. -->
+  <!-- Retain ReadyToRun startup performance. The optimized publish trims only
+       compatible libraries and preserves our reflection/XAML/WinRT boundaries. -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <PublishTrimmed>False</PublishTrimmed>
   </PropertyGroup>
+  <PropertyGroup>
+    <EnablePlaybackSmoke Condition="'$(EnablePlaybackSmoke)' == '' and '$(Configuration)' == 'Debug'">true</EnablePlaybackSmoke>
+    <DefineConstants Condition="'$(EnablePlaybackSmoke)' == 'true'">$(DefineConstants);PLAYBACK_SMOKE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(OptimizeDistribution)' == 'true'">
+    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(OptimizeDistribution)' == 'true'">
+    <!-- DTOs, anonymous JSON requests, generated messenger registrations and
+         WinRT ABI helpers are reached dynamically. Keep them intact. -->
+    <TrimmerRootAssembly Include="$(AssemblyName)" />
+    <TrimmerRootAssembly Include="WinRT.Runtime" />
+    <TrimmerRootAssembly Include="Microsoft.Windows.SDK.NET" />
+    <TrimmerRootAssembly Include="Microsoft.WinUI" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(EnablePlaybackSmoke)' == 'true'">
+    <Compile Include="../../../tools/PlaybackSmoke/NativePlaybackSmoke.cs" Link="Tests/NativePlaybackSmoke.cs" />
+  </ItemGroup>
 </Project>

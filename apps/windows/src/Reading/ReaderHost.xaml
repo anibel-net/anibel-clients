@@ -30,7 +30,7 @@
                     <ProgressRing x:Name="LoadingRing" IsActive="False" Width="40" Height="40" Foreground="Gray" />
                 </StackPanel>
                 <Grid x:Name="ErrorHost" Visibility="Collapsed">
-                    <views:EmptyState x:Name="ErrorState" Title="Прабачце!" Glyph="&#xE7BA;" ActionText="Абнавіць" SecondaryText="Капіяваць"
+                    <views:EmptyState x:Name="ErrorState" Title="Прабачце!" Glyph="&#xE7BA;" ActionText="Абнавіць" SecondaryText="Скапіяваць"
                         ActionClick="OnRetryErrorClick" SecondaryClick="OnCopyErrorClick" />
                 </Grid>
             </Grid>

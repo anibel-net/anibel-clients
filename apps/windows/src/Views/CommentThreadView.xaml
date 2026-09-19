@@ -17,7 +17,7 @@
                 <TextBlock x:Name="BodyText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <StackPanel Orientation="Horizontal" Spacing="16">
                     <HyperlinkButton Content="Адказаць" Click="OnReplyClick" Padding="0" MinHeight="0" FontSize="12" />
-                    <HyperlinkButton Content="Капіяваць" Click="OnCopyClick" Padding="0" MinHeight="0" FontSize="12" />
+                    <HyperlinkButton Content="Скапіяваць" Click="OnCopyClick" Padding="0" MinHeight="0" FontSize="12" />
                 </StackPanel>
             </StackPanel>
         </Grid>

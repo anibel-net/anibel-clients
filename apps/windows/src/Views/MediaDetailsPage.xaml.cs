@@ -145,7 +145,7 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
             ? RatingDisplay.Stars(Vm.Media.Rating.Value) : -1;
         TitleRating.IsReadOnly = !Vm.ShowPersonal || Vm.RatingSaving;
         TitleRating.Caption = Vm.RatingSaving ? "Захаванне…" : TitleRating.Value > 0
-            ? $"Мая ацэнка: {TitleRating.Value:0.0}" : Vm.Rating;
+            ? $"Мая адзнака: {TitleRating.Value:0.0}" : Vm.Rating;
         ToolTipService.SetToolTip(TitleRating, string.IsNullOrEmpty(Vm.Rating) ? "Ацаніць" : Vm.Rating);
         DescriptionText.Text = Vm.Description;
 
@@ -264,7 +264,7 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         _appliedPosterUrl = url;
         if (url is { Length: > 0 } && Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            PosterImage.Source = new BitmapImage(uri);
+            PosterImage.Source = (Microsoft.UI.Xaml.Media.ImageSource)new StringToImageConverter().Convert(url, typeof(Microsoft.UI.Xaml.Media.ImageSource), null!, "");
         }
         else
         {

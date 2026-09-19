@@ -81,7 +81,7 @@
                               Message="{x:Bind Vm.StatusMessage, Mode=OneWay}"
                               Glyph="&#xE7BA;"
                               ActionText="Паўтарыць"
-                              SecondaryText="Капіяваць"
+                              SecondaryText="Скапіяваць"
                               ActionClick="OnRetrySearchClick"
                               SecondaryClick="OnCopyStatusClick"
                               Visibility="{x:Bind Vm.ShowErrorState, Mode=OneWay, Converter={StaticResource BoolVis}}" />

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Anibel.App.Services;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -46,14 +47,34 @@ public sealed class StringToImageConverter : IValueConverter
             image.DecodePixelType = DecodePixelType.Logical;
             image.DecodePixelHeight = height;
         }
-        image.UriSource = uri;
         if (Cache.TryAdd(key, image))
         {
             Order.Enqueue(key);
             Trim();
+            image.ImageFailed += (_, _) =>
+            {
+                Cache.TryRemove(key, out _);
+                if (uri.Scheme is "http" or "https") ImageDiskCache.Shared.Invalidate(url);
+            };
+            _ = LoadAsync(image, uri, url, key);
             return image;
         }
         return Cache.TryGetValue(key, out var raced) ? raced : image;
+    }
+
+    private static async Task LoadAsync(BitmapImage image, Uri uri, string url, string key)
+    {
+        try
+        {
+            image.UriSource = uri.Scheme is "http" or "https"
+                ? new Uri(await ImageDiskCache.Shared.GetAsync(url)) : uri;
+        }
+        catch (Exception ex)
+        {
+            Cache.TryRemove(key, out _);
+            // Keep images usable when the cache directory cannot be written.
+            if (ex is System.IO.IOException or UnauthorizedAccessException) image.UriSource = uri;
+        }
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)

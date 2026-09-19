@@ -42,6 +42,14 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if PLAYBACK_SMOKE
+        var commandLine = Environment.GetCommandLineArgs();
+        if (commandLine.Length == 3 && commandLine[1] == "--native-playback-smoke")
+        {
+            new global::PlaybackSmoke.NativePlaybackSmoke(this, System.IO.Path.GetFullPath(commandLine[2])).Start();
+            return;
+        }
+#endif
         var builder = Host.CreateApplicationBuilder();
         var settings = new SettingsService();
         settings.Load(); // persisted language/API endpoints — before anything reads them

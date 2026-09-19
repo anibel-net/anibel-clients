@@ -2,6 +2,8 @@ using System.Text.Json;
 
 namespace Anibel.App.Services;
 
+public enum WindowBackground { Solid, Mica, Acrylic }
+
 /// <summary>
 /// App-level settings (language, API endpoints) — plain JSON in LocalAppData.
 /// Endpoints are passed to the Rust core at init (dev override support).
@@ -12,6 +14,7 @@ public sealed class SettingsService
     private readonly string _path;
 
     public string Language { get; set; } = "be";
+    public WindowBackground Background { get; set; } = WindowBackground.Mica;
     public string ApiBaseUrl { get; set; } = "https://anibel.net/graphql";
     public string VideoBaseUrl { get; set; } = "https://api.anibel.stream";
 
@@ -36,6 +39,7 @@ public sealed class SettingsService
             if (dto is not null)
             {
                 Language = string.IsNullOrWhiteSpace(dto.Language) ? Language : dto.Language;
+                Background = Enum.IsDefined(dto.Background) ? dto.Background : WindowBackground.Mica;
                 ApiBaseUrl = string.IsNullOrWhiteSpace(dto.ApiBaseUrl) ? ApiBaseUrl : dto.ApiBaseUrl;
                 VideoBaseUrl = string.IsNullOrWhiteSpace(dto.VideoBaseUrl) ? VideoBaseUrl : dto.VideoBaseUrl;
             }
