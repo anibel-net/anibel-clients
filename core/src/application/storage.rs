@@ -113,6 +113,16 @@ pub(super) async fn fetch_file(
     path: &Path,
     limit: u64,
 ) -> Result<u64> {
+    fetch_file_with_progress(http, url, path, limit, |_, _| {}).await
+}
+
+pub(super) async fn fetch_file_with_progress(
+    http: &reqwest::Client,
+    url: &str,
+    path: &Path,
+    limit: u64,
+    progress: impl Fn(u64, Option<u64>),
+) -> Result<u64> {
     let mut response = http
         .get(url)
         .send()
@@ -128,6 +138,9 @@ pub(super) async fn fetch_file(
         .ok_or_else(|| AnibelError::BadArgs("invalid asset path".into()))?;
     std::fs::create_dir_all(parent).map_err(io_error)?;
     let mut file = tempfile::NamedTempFile::new_in(parent).map_err(io_error)?;
+    let total = response.content_length();
+    progress(0, total);
+    let mut last_report = std::time::Instant::now();
     let mut bytes = 0_u64;
     while let Some(chunk) = response.chunk().await.map_err(http_error)? {
         bytes = bytes
@@ -135,7 +148,12 @@ pub(super) async fn fetch_file(
             .filter(|n| *n <= limit)
             .ok_or_else(|| AnibelError::BadArgs("asset exceeds size limit".into()))?;
         file.write_all(&chunk).map_err(io_error)?;
+        if last_report.elapsed() >= std::time::Duration::from_millis(200) {
+            progress(bytes, total);
+            last_report = std::time::Instant::now();
+        }
     }
+    progress(bytes, total);
     if bytes == 0 {
         return Err(AnibelError::Transport("empty asset".into()));
     }

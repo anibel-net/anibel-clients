@@ -168,7 +168,7 @@ pub async fn resolve_intent(
         .subtitles
         .iter()
         .map(|s| SubtitleTrack {
-            url: s.path.clone(),
+            url: crate::video::join_host(info.host.as_deref(), &s.path),
             fonts: s.fonts.clone(),
             label: subtitle_label(&s.path),
         })
@@ -277,7 +277,8 @@ mod tests {
                     "processing": false,
                     "meta": { "width": 1920, "height": 1080, "duraction": 600.0 },
                     "subtitles": [
-                        { "path": "https://subtitles.anibel.net/8c52d132/ep13.ass", "fonts": ["Montserrat"] }
+                        { "path": "https://subtitles.anibel.net/8c52d132/ep13.ass", "fonts": ["Montserrat"] },
+                        { "path": "/subtitles/8c52d132/субцітры.ass", "fonts": [] }
                     ],
                     "hls": "/dash/8c52d132/manifest.m3u8",
                     "host": "https://n3.anibel.stream"
@@ -307,7 +308,9 @@ mod tests {
             intent.video_src.as_deref(),
             Some("https://n3.anibel.stream/dash/8c52d132/manifest.m3u8")
         );
-        assert_eq!(intent.subtitles.len(), 1);
+        assert_eq!(intent.subtitles.len(), 2);
+        assert_eq!(intent.subtitles[0].url, "https://subtitles.anibel.net/8c52d132/ep13.ass");
+        assert_eq!(intent.subtitles[1].url, "https://n3.anibel.stream/subtitles/8c52d132/субцітры.ass");
         assert_eq!(intent.subtitles[0].label.as_deref(), Some("ep13"));
         assert_eq!(intent.fonts[0].family, "Montserrat");
         assert_eq!(intent.duration_secs, Some(600.0));

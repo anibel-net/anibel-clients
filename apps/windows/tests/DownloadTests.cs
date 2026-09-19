@@ -72,3 +72,35 @@ public class CoreStateAdapterTests
         Assert.Equal("remove", core.Calls[1].Args.GetProperty("action").GetString());
     }
 }
+
+public class DownloadProgressTests
+{
+    [Fact]
+    public void Known_progress_shows_percent_size_speed_and_estimate()
+    {
+        var row = new DownloadItem { Status = DownloadStatus.Downloading, ProgressKnown = true,
+            Progress = .42, BytesReceived = 4200, BytesTotal = 10000, BytesPerSecond = 1000, RemainingSeconds = 6 };
+        Assert.False(row.ProgressIsUnknown);
+        Assert.Equal(42, row.ProgressPercent);
+        Assert.Contains("42%", row.ProgressLabel);
+        Assert.Contains("/", row.ProgressLabel);
+        Assert.Contains("6 с", row.ProgressLabel);
+    }
+    [Fact]
+    public void Unknown_total_shows_received_bytes_without_false_percent()
+    {
+        var row = new DownloadItem { Status = DownloadStatus.Downloading, BytesReceived = 1024 };
+        Assert.True(row.ProgressIsUnknown);
+        Assert.DoesNotContain("%", row.ProgressLabel);
+        Assert.Equal(DownloadItem.FormatBytes(1024), row.ProgressLabel);
+    }
+    [Fact]
+    public void Finalization_does_not_claim_completion()
+    {
+        var row = new DownloadItem { Status = DownloadStatus.Downloading, ProgressKnown = true, Progress = 1, Phase = DownloadPhase.Finalizing };
+        Assert.Equal(99, row.ProgressPercent);
+        Assert.Contains("Завяршэнне", row.StatusLabel);
+        row.Status = DownloadStatus.Completed;
+        Assert.Equal(100, row.ProgressPercent);
+    }
+}

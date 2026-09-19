@@ -108,13 +108,16 @@
                                     <TextBlock Text="{x:Bind KindLabel, Mode=OneWay}"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Opacity="0.7" />
+                                    <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                               Visibility="{x:Bind IsCompleted, Mode=OneWay, Converter={StaticResource BoolVis}}" />
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4"
                                             Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource BoolVis}}">
+                                    <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
                                     <ProgressBar Value="{x:Bind ProgressPercent, Mode=OneWay}"
                                                  Maximum="100" IsIndeterminate="{x:Bind ProgressIsUnknown, Mode=OneWay}" />
-                                    <TextBlock Text="{x:Bind ProgressLabel, Mode=OneWay}"
+                                    <TextBlock Text="{x:Bind ProgressLabel, Mode=OneWay}" TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>

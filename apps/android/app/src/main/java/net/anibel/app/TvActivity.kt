@@ -2,79 +2,100 @@ package net.anibel.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
-import androidx.tv.material3.darkColorScheme
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
+import androidx.tv.material3.*
+
+private const val DrawerScale = 0.8f
 
 class TvActivity : ComponentActivity() {
+    override fun attachBaseContext(base: android.content.Context) { super.attachBaseContext(Language.wrap(base)) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { TvWelcome() }
+        setContent { AppHost(true) { TvApp() } }
     }
 }
 
 @Composable
-internal fun TvWelcome() {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = AnibelAccent,
-            background = AnibelBackground,
-            onBackground = AnibelText,
-        ),
-    ) {
-        Box(
-            Modifier.fillMaxSize().background(AnibelBackground).padding(48.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Row(
-                Modifier.widthIn(max = 960.dp),
-                horizontalArrangement = Arrangement.spacedBy(48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BrandMark(Modifier.size(200.dp))
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.app_name),
-                        color = AnibelAccent,
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                    Text(
-                        stringResource(R.string.welcome_title),
-                        color = AnibelText,
-                        style = MaterialTheme.typography.displaySmall,
-                    )
-                    Text(
-                        stringResource(R.string.welcome_subtitle),
-                        color = AnibelText,
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
+internal fun TvApp() {
+    var page by rememberSaveable { mutableStateOf(AppPage.Home) }
+    val drawerState = rememberDrawerState(DrawerValue.Open)
+    var navigationHasFocus by remember { mutableStateOf(false) }
+    val contentFocus = remember { FocusRequester() }
+    val navigationFocus = remember {
+        AppPage.tvNavigation.associateWith { FocusRequester() }
+    }
+    LaunchedEffect(Unit) { navigationFocus.getValue(page).requestFocus() }
+
+    // Back first returns from content to the selected sidebar item, then goes up.
+    BackHandler(enabled = !navigationHasFocus || page != AppPage.Home) {
+        if (navigationHasFocus) page = AppPage.Home
+        navigationFocus.getValue(page).requestFocus()
+    }
+
+    SystemTheme(isTv = true) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding(),
+            drawerContent = { value ->
+                val density = LocalDensity.current
+                // TV drawer items have fixed native dimensions. Scale only the drawer,
+                // preserving the device font scale and the library focus/animation behavior.
+                CompositionLocalProvider(LocalDensity provides Density(density.density * DrawerScale, density.fontScale)) {
+                    Column(
+                        Modifier.fillMaxHeight().background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 12.dp, vertical = 20.dp)
+                            .onFocusChanged { navigationHasFocus = it.hasFocus }
+                            .onPreviewKeyEvent {
+                                if (it.key == Key.DirectionRight && it.type == KeyEventType.KeyDown) {
+                                    contentFocus.requestFocus()
+                                    true
+                                } else false
+                            }
+                            .focusGroup(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        AppPage.tvNavigation.forEach { destination ->
+                            if (destination == AppPage.Profile) Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
+                            NavigationDrawerItem(
+                                selected = page == destination,
+                                onClick = { page = destination },
+                                leadingContent = { Icon(painterResource(destination.icon), if (value == DrawerValue.Closed) stringResource(destination.title) else null) },
+                                modifier = Modifier.focusRequester(navigationFocus.getValue(destination))
+                                    .onFocusChanged { if (it.isFocused) page = destination }
+                                    .testTag("nav_${destination.name}"),
+                            ) {
+                                Text(stringResource(destination.title), maxLines = 1)
+                            }
+                        }
+                    }
                 }
+            },
+        ) {
+            // Reserve the native collapsed item width plus the drawer's horizontal padding.
+            Box(Modifier.fillMaxSize().padding(start = 80.dp * DrawerScale).focusRequester(contentFocus).focusGroup()) {
+                key(page) { PageContent(page, isTv = true) }
             }
         }
     }
-}
-
-@Preview(name = "TV", widthDp = 960, heightDp = 540)
-@Composable
-private fun TvWelcomePreview() {
-    TvWelcome()
 }

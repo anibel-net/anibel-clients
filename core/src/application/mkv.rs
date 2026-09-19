@@ -3,6 +3,7 @@ use super::{hls::MAX_JOB_BYTES, storage::io_error};
 use anibel_domain::error::{AnibelError, Result};
 use serde::Deserialize;
 use std::{
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::Duration,
@@ -78,6 +79,51 @@ async fn run(
 #[derive(Deserialize)]
 struct Probe {
     streams: Vec<Stream>,
+    #[serde(default)]
+    format: ProbeFormat,
+}
+#[derive(Default, Deserialize)]
+struct ProbeFormat {
+    duration: Option<String>,
+}
+#[derive(Clone, Copy, Default)]
+pub(super) struct Progress {
+    pub processed: f64,
+    pub duration: f64,
+}
+fn progress_tail(path: &Path, duration: f64) -> Progress {
+    let mut result = Progress {
+        duration,
+        ..Default::default()
+    };
+    // Read a bounded tail; progress logs can grow throughout a long download.
+    if let Ok(mut file) = std::fs::File::open(path) {
+        let start = file
+            .metadata()
+            .map(|m| m.len().saturating_sub(8192))
+            .unwrap_or(0);
+        let mut text = String::new();
+        if file.seek(SeekFrom::Start(start)).is_ok()
+            && file.take(8192).read_to_string(&mut text).is_ok()
+        {
+            result.processed = if text.lines().any(|line| line == "progress=end") {
+                duration
+            } else {
+                processed_time(&text)
+            };
+        }
+    }
+    result
+}
+fn processed_time(text: &str) -> f64 {
+    text.split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix("out_time_us=")?.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .last()
+        .unwrap_or(0.0)
+        / 1_000_000.0
 }
 #[derive(Deserialize)]
 struct Stream {
@@ -108,7 +154,7 @@ pub(super) async fn download(
     fonts: &[String],
     output: &Path,
     title: &str,
-    progress: impl Fn(u64),
+    progress: impl Fn(u64, Progress),
 ) -> Result<()> {
     let parent = output
         .parent()
@@ -122,7 +168,7 @@ pub(super) async fn download(
             "-rw_timeout",
             "15000000",
             "-show_entries",
-            "stream=index,codec_type,codec_name,width,height",
+            "stream=index,codec_type,codec_name,width,height:format=duration",
             "-of",
             "json",
             source,
@@ -133,6 +179,21 @@ pub(super) async fn download(
     let data: Probe = serde_json::from_slice(&std::fs::read(probe_file.path()).map_err(io_error)?)
         .map_err(|e| AnibelError::Transport(format!("invalid media tracks: {e}")))?;
     let video = video_index(&data)?;
+    let duration = data
+        .format
+        .duration
+        .as_deref()
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(0.0);
+    let progress_file = tempfile::NamedTempFile::new_in(parent).map_err(io_error)?;
+    progress(
+        0,
+        Progress {
+            duration,
+            ..Default::default()
+        },
+    );
     let temporary = tempfile::Builder::new()
         .suffix(".mkv")
         .tempfile_in(parent)
@@ -222,11 +283,19 @@ pub(super) async fn download(
             &format!("mimetype={mime}"),
         ]);
     }
+    mux.args(["-progress"]).arg(progress_file.path());
     mux.args(["-f", "matroska"])
         .arg(temporary.path())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    run(mux, temporary.path(), MAX_JOB_BYTES, &progress).await?;
+    run(mux, temporary.path(), MAX_JOB_BYTES, &|bytes| {
+        progress(bytes, progress_tail(progress_file.path(), duration))
+    })
+    .await?;
+    progress(
+        temporary.as_file().metadata().map_err(io_error)?.len(),
+        progress_tail(progress_file.path(), duration),
+    );
     if temporary.as_file().metadata().map_err(io_error)?.len() == 0 {
         return Err(AnibelError::Transport("empty MKV output".into()));
     }
@@ -237,6 +306,21 @@ pub(super) async fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn progress_uses_complete_valid_time_lines() {
+        assert_eq!(
+            processed_time("out_time_us=1500000\nprogress=continue\nout_time_us=2"),
+            1.5
+        );
+        assert_eq!(
+            processed_time("out_time_us=N/A\nout_time_us=-1\nout_time_us=NaN\n"),
+            0.0
+        );
+        assert_eq!(
+            processed_time("out_time_us=1000000\nout_time_us=2500000\n"),
+            2.5
+        );
+    }
     // Fixture generation needs encoders that the shipped remux-only build omits.
     fn fixture_ffmpeg() -> Command {
         std::env::var_os("ANIBEL_TEST_FFMPEG")
@@ -249,26 +333,28 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let output = dir.path().join("cancel.mkv");
         let input = dir.path().join("input.mkv");
-        assert!(fixture_ffmpeg()
-            .args([
-                "-v",
-                "error",
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                "testsrc=size=64x64:rate=30",
-                "-t",
-                "1",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p"
-            ])
-            .arg(&input)
-            .status()
-            .unwrap()
-            .success());
+        assert!(
+            fixture_ffmpeg()
+                .args([
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=64x64:rate=30",
+                    "-t",
+                    "1",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p"
+                ])
+                .arg(&input)
+                .status()
+                .unwrap()
+                .success()
+        );
         let mut cmd = command("ffmpeg");
         cmd.args(["-v", "error", "-y", "-re", "-stream_loop", "-1", "-i"])
             .arg(&input)
@@ -276,12 +362,14 @@ mod tests {
             .arg(&output)
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        assert!(tokio::time::timeout(
-            Duration::from_secs(2),
-            run(cmd, &output, MAX_JOB_BYTES, &|_| {})
-        )
-        .await
-        .is_err());
+        assert!(
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                run(cmd, &output, MAX_JOB_BYTES, &|_| {})
+            )
+            .await
+            .is_err()
+        );
         let length = output.metadata().unwrap().len();
         assert!(length > 0);
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -302,7 +390,7 @@ mod tests {
                 "-f",
                 "lavfi",
                 "-i",
-                "color=size=64x64:rate=1",
+                "color=size=64x64:rate=30",
                 "-f",
                 "lavfi",
                 "-i",
@@ -350,16 +438,18 @@ mod tests {
         )).unwrap();
         subtitles.push(ass.to_string_lossy().into_owned());
         let mp4 = dir.path().join("subtitled.mp4");
-        assert!(fixture_ffmpeg()
-            .args(["-v", "error", "-y", "-i"])
-            .arg(&input)
-            .arg("-i")
-            .arg(&subtitles[0])
-            .args(["-map", "0", "-map", "1", "-c", "copy", "-c:s", "mov_text"])
-            .arg(&mp4)
-            .status()
-            .unwrap()
-            .success());
+        assert!(
+            fixture_ffmpeg()
+                .args(["-v", "error", "-y", "-i"])
+                .arg(&input)
+                .arg("-i")
+                .arg(&subtitles[0])
+                .args(["-map", "0", "-map", "1", "-c", "copy", "-c:s", "mov_text"])
+                .arg(&mp4)
+                .status()
+                .unwrap()
+                .success()
+        );
         let font = dir.path().join("font.ttf");
         std::fs::write(&font, b"attachment fixture").unwrap();
         let hls = dir.path().join("stream.m3u8");
@@ -397,6 +487,7 @@ mod tests {
         ];
         for (index, source) in sources.iter().enumerate() {
             let output = dir.path().join(format!("output-{index}.mkv"));
+            let observed = std::sync::Mutex::new((0_u64, 0.0_f64, 0.0_f64));
             download(
                 source,
                 None,
@@ -404,10 +495,22 @@ mod tests {
                 &[font.to_string_lossy().into_owned()],
                 &output,
                 "Test title",
-                |_| {},
+                |bytes, progress| {
+                    let mut latest = observed.lock().unwrap();
+                    *latest = (
+                        bytes.max(latest.0),
+                        progress.processed.max(latest.1),
+                        progress.duration,
+                    );
+                },
             )
             .await
             .unwrap();
+            let progress = *observed.lock().unwrap();
+            assert!(
+                progress.0 > 0 && progress.1 > 0.0 && progress.2 > 0.0,
+                "missing progress for {source}: {progress:?}"
+            );
             let result = command("ffprobe")
                 .args(["-v", "error", "-show_streams", "-of", "json"])
                 .arg(&output)
@@ -433,9 +536,11 @@ mod tests {
                 .map(|s| s["tags"]["language"].as_str().unwrap())
                 .collect();
             assert_eq!(languages, ["jpn", "bel"]);
-            assert!(streams
-                .iter()
-                .any(|s| s["codec_name"] == "ass" && s["tags"]["title"] == "Знакі"));
+            assert!(
+                streams
+                    .iter()
+                    .any(|s| s["codec_name"] == "ass" && s["tags"]["title"] == "Знакі")
+            );
             if index == 3 {
                 assert_eq!(
                     streams
@@ -458,6 +563,12 @@ mod tests {
         ]}))
         .unwrap();
         assert_eq!(video_index(&probe).unwrap(), 3);
-        assert!(video_index(&Probe { streams: vec![] }).is_err());
+        assert!(
+            video_index(&Probe {
+                streams: vec![],
+                format: ProbeFormat::default()
+            })
+            .is_err()
+        );
     }
 }

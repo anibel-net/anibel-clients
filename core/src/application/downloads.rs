@@ -11,7 +11,7 @@ use std::{
     collections::HashMap,
     path::Path,
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use tokio_util::sync::CancellationToken;
@@ -95,6 +95,8 @@ impl Assets {
 }
 #[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Record {
+    #[serde(skip)]
+    live: LiveProgress,
     pub id: String,
     pub kind: Kind,
     pub request: Request,
@@ -105,6 +107,21 @@ pub(super) struct Record {
     pub parts_done: u64,
     pub parts_total: u64,
     pub created: u64,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum Phase {
+    Queued,
+    Preparing,
+    Downloading,
+    Finalizing,
+}
+
+#[derive(Clone, Default)]
+struct LiveProgress {
+    started: Option<Instant>,
+    total_bytes: Option<u64>,
+    media: super::mkv::Progress,
 }
 struct Work {
     cancel: CancellationToken,
@@ -235,11 +252,50 @@ impl Downloads {
         let obj = value.as_object_mut().unwrap();
         let ready = self.available(r);
         let absolute = |p: &Option<String>| p.as_ref().and_then(|p| self.absolute(p).ok());
+        let progress = if ready {
+            1.0
+        } else if r.live.media.duration > 0.0 {
+            r.live.media.processed / r.live.media.duration
+        } else if r.live.total_bytes.is_some_and(|n| n > 0) {
+            r.bytes as f64 / r.live.total_bytes.unwrap() as f64
+        } else if r.parts_total > 0 {
+            r.parts_done as f64 / r.parts_total as f64
+        } else {
+            0.0
+        };
+        let progress = progress.clamp(0.0, 1.0);
+        let elapsed = r
+            .live
+            .started
+            .map(|t| t.elapsed().as_secs_f64())
+            .unwrap_or(0.0);
+        let speed = if r.status.active() && elapsed >= 1.0 {
+            r.bytes as f64 / elapsed
+        } else {
+            0.0
+        };
+        let remaining = if r.status.active() && elapsed >= 1.0 && progress > 0.0 && progress < 1.0 {
+            Some((elapsed * (1.0 - progress) / progress).ceil().min(604800.0) as u64)
+        } else {
+            None
+        };
+        let phase = if !r.status.active() {
+            None
+        } else if r.status == Status::Queued {
+            Some(Phase::Queued)
+        } else if progress >= 1.0 {
+            Some(Phase::Finalizing)
+        } else if r.bytes > 0 || r.parts_done > 0 {
+            Some(Phase::Downloading)
+        } else {
+            Some(Phase::Preparing)
+        };
         let fields = json!({"id":r.id,"kind":r.kind,"status":if r.status==Status::Completed&&!ready {Status::Failed}else{r.status},
             "subtitle":r.request.subtitle.as_ref().or(r.request.chapter_title.as_ref()).cloned().unwrap_or_else(||r.request.episode_label.clone()),
             "error":if r.status==Status::Completed&&!ready {Some("download assets are missing".to_owned())}else{r.error.clone()},
             "bytesReceived":r.bytes,"diskBytes":r.bytes,"partsDone":r.parts_done,"partsTotal":r.parts_total,
-            "progress":if ready {1.0}else if r.parts_total>0 {r.parts_done as f64/r.parts_total as f64}else{0.0},
+            "progress":progress,"progressKnown":ready||r.live.media.duration>0.0||r.live.total_bytes.is_some_and(|n| n>0)||r.parts_total>0,
+            "bytesTotal":r.live.total_bytes,"bytesPerSecond":speed,"remainingSeconds":remaining,"phase":phase,
             "posterPath":absolute(&r.assets.poster_path),
             "canPlay":ready&&r.kind!=Kind::File,"canSave":ready,"canRetry":matches!(r.status,Status::Failed|Status::Cancelled)||r.status==Status::Completed&&!ready});
         obj.remove("fileUrl");
@@ -309,6 +365,7 @@ impl Downloads {
             next.insert(
                 0,
                 Record {
+                    live: LiveProgress::default(),
                     id: id.clone(),
                     kind,
                     request,
@@ -422,6 +479,7 @@ impl Downloads {
                 match action {
                     "retry" => {
                         r.status = Status::Queued;
+                        r.live = LiveProgress::default();
                         r.assets = Assets::default();
                         r.error = None;
                         r.bytes = 0;
@@ -467,6 +525,10 @@ impl Downloads {
             let mut records = self.records.lock().unwrap();
             let row = records.iter_mut().find(|r| r.id == id).unwrap();
             row.status = Status::Downloading;
+            row.live = LiveProgress {
+                started: Some(Instant::now()),
+                ..Default::default()
+            };
             self.save(&records)?;
         }
         let folder = Self::folder(id);
@@ -506,13 +568,8 @@ impl Downloads {
             Kind::File => {
                 let url = required(&r.request.file_url, "fileUrl")?;
                 let rel = format!("{folder}/file{}", extension(url, ".bin"));
-                fetch_file(
-                    &self.http,
-                    url,
-                    &self.storage.path(&rel)?,
-                    hls::MAX_JOB_BYTES,
-                )
-                .await?;
+                self.fetch_progress(id, url, &self.storage.path(&rel)?)
+                    .await?;
                 assets.file_path = Some(rel);
             }
             Kind::Video | Kind::Audio => {
@@ -549,7 +606,16 @@ impl Downloads {
                             .collect::<Result<Vec<_>>>()?,
                         &self.storage.path(&path)?,
                         &r.request.title,
-                        |bytes| self.progress(id, 0, 0, bytes),
+                        |bytes, media| {
+                            if let Some(row) =
+                                self.records.lock().unwrap().iter_mut().find(|r| r.id == id)
+                            {
+                                row.bytes = bytes;
+                                row.live.media.processed =
+                                    row.live.media.processed.max(media.processed);
+                                row.live.media.duration = media.duration;
+                            }
+                        },
                     )
                     .await?;
                     assets.video_path = Some(path);
@@ -608,6 +674,22 @@ impl Downloads {
         self.progress(id, 1, 1, bytes);
         Ok(assets)
     }
+    async fn fetch_progress(&self, id: &str, url: &str, path: &Path) -> Result<u64> {
+        super::storage::fetch_file_with_progress(
+            &self.http,
+            url,
+            path,
+            hls::MAX_JOB_BYTES,
+            |bytes, total| {
+                if let Some(row) = self.records.lock().unwrap().iter_mut().find(|r| r.id == id) {
+                    row.bytes = bytes;
+                    row.live.total_bytes = total;
+                }
+            },
+        )
+        .await
+    }
+
     async fn fetch_media(
         &self,
         src: &str,
@@ -623,7 +705,7 @@ impl Downloads {
         if ext != ".m3u8" && ext != ".m3u" {
             let relative = format!("{folder}/media{}", extension(src, ".mp4"));
             let path = self.storage.path(&relative)?;
-            fetch_file(&self.http, src, &path, hls::MAX_JOB_BYTES).await?;
+            self.fetch_progress(id, src, &path).await?;
             use std::io::Read;
             let mut prefix = [0u8; 1024];
             let n = std::fs::File::open(&path)
@@ -642,6 +724,10 @@ impl Downloads {
                 return Ok((relative, Vec::new()));
             }
             std::fs::remove_file(path).map_err(io_error)?;
+        }
+        if let Some(row) = self.records.lock().unwrap().iter_mut().find(|r| r.id == id) {
+            row.live.total_bytes = None;
+            row.bytes = 0;
         }
         let required = hls::download(&self.http, src, &dir, |d, t, b| self.progress(id, d, t, b))
             .await?
@@ -805,6 +891,46 @@ mod tests {
         }
     }
     #[tokio::test]
+    async fn snapshot_reports_real_progress_without_persisting_live_estimates() {
+        let server = MockServer::start_async().await;
+        let d = setup(&server);
+        let mut row = Record {
+            id: "progress".into(),
+            kind: Kind::File,
+            request: request(&server),
+            status: Status::Downloading,
+            assets: Assets::default(),
+            error: None,
+            bytes: 250,
+            parts_done: 0,
+            parts_total: 0,
+            created: 0,
+            live: LiveProgress {
+                started: Some(Instant::now() - std::time::Duration::from_secs(10)),
+                total_bytes: Some(1000),
+                media: Default::default(),
+            },
+        };
+        let snapshot = d.snapshot(&row);
+        assert_eq!(snapshot["progress"], 0.25);
+        assert_eq!(snapshot["progressKnown"], true);
+        assert!(snapshot["bytesPerSecond"].as_f64().unwrap() > 0.0);
+        assert!((30..=31).contains(&snapshot["remainingSeconds"].as_u64().unwrap()));
+        let restored: Record = serde_json::from_value(serde_json::to_value(&row).unwrap()).unwrap();
+        assert!(restored.live.started.is_none());
+        row.live.total_bytes = None;
+        assert_eq!(d.snapshot(&row)["progressKnown"], false);
+        assert_eq!(d.snapshot(&row)["remainingSeconds"], Value::Null);
+        row.live.media = super::super::mkv::Progress {
+            processed: 30.0,
+            duration: 120.0,
+        };
+        assert_eq!(d.snapshot(&row)["progress"], 0.25);
+        row.live.media.processed = 121.0;
+        assert_eq!(d.snapshot(&row)["progress"], 1.0);
+        assert_eq!(d.snapshot(&row)["phase"], "finalizing");
+    }
+    #[tokio::test]
     async fn mkv_export_is_one_file_and_does_not_overwrite() {
         let server = MockServer::start_async().await;
         let d = setup(&server);
@@ -817,6 +943,7 @@ mod tests {
         request.episode_label = "1".into();
         request.video_format = VideoFormat::Mkv;
         d.records.lock().unwrap().push(Record {
+            live: LiveProgress::default(),
             id: "mkv-test".into(),
             kind: Kind::Video,
             request,
@@ -938,6 +1065,7 @@ mod tests {
         assert!(d.work.lock().unwrap().is_empty());
         std::fs::remove_dir(d.storage.root.join("downloads.json")).unwrap();
         let r = Record {
+            live: LiveProgress::default(),
             id: "restore".into(),
             kind: Kind::File,
             request: request(&server),
@@ -979,6 +1107,7 @@ mod tests {
             .await
             .unwrap();
         let r = Record {
+            live: LiveProgress::default(),
             id: "hls".into(),
             kind: Kind::Video,
             request: Request::default(),

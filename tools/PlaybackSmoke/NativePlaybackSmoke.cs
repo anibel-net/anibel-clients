@@ -472,6 +472,13 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         _window!.Content = downloadsPage;
         await Task.Delay(200);
         row.Apply(new Anibel.App.Services.DownloadItem { Id = row.Id, Title = row.Title,
+            Status = Anibel.App.Services.DownloadStatus.Downloading, ProgressKnown = true,
+            Progress = .42, BytesReceived = 4200, BytesTotal = 10000, BytesPerSecond = 1000, RemainingSeconds = 6 });
+        await Task.Delay(250);
+        var activeContainer = downloadsPage.FindName("List") as ListView;
+        var activeBar = Anibel.App.Services.KeyboardNavigation.Find<ProgressBar>(activeContainer!);
+        Check(activeBar is { IsIndeterminate: false, Value: 42 }, "Download progress did not update");
+        row.Apply(new Anibel.App.Services.DownloadItem { Id = row.Id, Title = row.Title,
             PosterPath = @"\\?\" + Path.Combine(directory, "cached-poster.image"),
             Status = Anibel.App.Services.DownloadStatus.Completed, CanPlay = true, CanSave = true, DiskBytes = 1024 });
         await Task.Delay(200);

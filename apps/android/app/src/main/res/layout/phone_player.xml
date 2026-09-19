@@ -1,0 +1,4 @@
+<net.anibel.app.PhonePlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    app:controller_layout_id="@layout/phone_player_controls" app:show_timeout="4000" />

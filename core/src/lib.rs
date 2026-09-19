@@ -11,3 +11,6 @@ pub mod application;
 pub mod ffi;
 
 pub use ffi::*;
+
+#[cfg(target_os = "android")]
+mod android;

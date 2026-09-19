@@ -1,0 +1,3 @@
+<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/material_player_controls"
+    android:layout_width="match_parent" android:layout_height="match_parent" />

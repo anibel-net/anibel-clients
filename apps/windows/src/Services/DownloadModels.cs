@@ -19,6 +19,8 @@ public enum DownloadStatus
     Cancelled,
 }
 
+public enum DownloadPhase { Queued, Preparing, Downloading, Finalizing }
+
 public enum VideoDownloadFormat { Source, Mkv }
 
 public sealed class EpisodeDownloadRequest
@@ -229,12 +231,18 @@ public sealed partial class DownloadItem : ObservableObject
         get; set;
     }
 
+    [ObservableProperty] public partial bool ProgressKnown { get; set; }
+    [ObservableProperty] public partial long? BytesTotal { get; set; }
+    [ObservableProperty] public partial double BytesPerSecond { get; set; }
+    [ObservableProperty] public partial long? RemainingSeconds { get; set; }
+    [ObservableProperty] public partial DownloadPhase? Phase { get; set; }
+
     public bool IsActive => Status is DownloadStatus.Queued or DownloadStatus.Downloading;
     public bool IsCompleted => Status == DownloadStatus.Completed;
     public bool IsFailed => Status == DownloadStatus.Failed;
     public bool HasSlug => !string.IsNullOrWhiteSpace(Slug);
-    public bool ProgressIsUnknown => IsActive && PartsTotal <= 0;
-    public int ProgressPercent => (int)Math.Clamp(Math.Round(Progress * 100), 0, 100);
+    public bool ProgressIsUnknown => IsActive && !ProgressKnown && PartsTotal <= 0;
+    public int ProgressPercent => double.IsFinite(Progress) ? (int)Math.Clamp(Math.Floor(Progress * 100), 0, IsActive ? 99 : 100) : 0;
 
     public string KindLabel => Kind switch
     {
@@ -248,6 +256,8 @@ public sealed partial class DownloadItem : ObservableObject
     public string StatusLabel => Status switch
     {
         DownloadStatus.Queued => Strings.StatusQueued,
+        DownloadStatus.Downloading when Phase == DownloadPhase.Preparing => "Падрыхтоўка файлаў…",
+        DownloadStatus.Downloading when Phase == DownloadPhase.Finalizing => "Завяршэнне файла…",
         DownloadStatus.Downloading => PartsTotal > 0
             ? Strings.StatusDownloadingParts(PartsDone, PartsTotal)
             : Strings.StatusDownloading,
@@ -265,15 +275,22 @@ public sealed partial class DownloadItem : ObservableObject
             {
                 return SizeLabel;
             }
-            if (PartsTotal > 0)
-            {
-                return $"{PartsDone} / {PartsTotal} · {ProgressPercent}%";
-            }
+            var details = new List<string>();
+            if (!ProgressIsUnknown && IsActive) details.Add($"{ProgressPercent}%");
             if (BytesReceived > 0)
+                details.Add(BytesTotal is > 0
+                    ? $"{FormatBytes(BytesReceived)} / {FormatBytes(BytesTotal.Value)}"
+                    : FormatBytes(BytesReceived));
+            if (IsActive && double.IsFinite(BytesPerSecond) && BytesPerSecond >= 1)
+                details.Add($"У сярэднім {FormatBytes((long)Math.Min(BytesPerSecond, long.MaxValue / 2))}/с");
+            if (IsActive && RemainingSeconds is > 0)
             {
-                return FormatBytes(BytesReceived);
+                var seconds = Math.Min(RemainingSeconds.Value, 604800);
+                var time = seconds >= 3600 ? $"{seconds / 3600} г {seconds % 3600 / 60} хв"
+                    : seconds >= 60 ? $"{seconds / 60} хв" : $"{seconds} с";
+                details.Add($"Засталося каля {time}");
             }
-            return StatusLabel;
+            return string.Join(" · ", details);
         }
     }
 

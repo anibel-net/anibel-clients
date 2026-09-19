@@ -9,7 +9,7 @@ Monorepo with:
 - `crates/anibel-api` — GraphQL (one `.graphql` file per op) + mapping
 - `crates/anibel-player` — video service + playback intent
 - `apps/windows` — WinUI 3 (C# / .NET 10) app: UI + native layer (Windows MediaPlayer + libass, WebView2 fallback)
-- `apps/android` — Kotlin / Jetpack Compose starter for phones, tablets, and TV; Rust binding is not yet implemented
+- `apps/android` — Kotlin / Jetpack Compose app for phones, tablets, and TV; uses the shared Rust core
 - future: `apps/ios`, `apps/macos`
 
 ## Shared core and native clients
@@ -42,9 +42,11 @@ keyboard to select a whole-star rating; saved half-star ratings still display.
 The core and API keep the original 1–10 scale: 3.5 stars is 7.
 
 Windows keeps WinUI view state, MediaPlayer/libass/WebView2, file pickers, protected credentials,
-localization, and OS integration. The Android starter has mobile and TV welcome
-screens. Its Kotlin binding and the Swift clients remain future work; they must
-use the same core commands. See [Android setup](apps/android/README.md).
+localization, and OS integration. Android has phone/tablet navigation, a TV
+sidebar, Material 3 Expressive, and Belarusian/English UI. Home, catalogs,
+search, profiles, personal lists, comments, downloads, reading, and playback use
+the core C ABI. Swift clients remain future work and must use the same
+core commands. See [Android setup](apps/android/README.md).
 
 Each open title has its own reader or player. Multiple titles can use separate
 PiP windows at the same time. The sidebar's open-title menu can show, float, or
