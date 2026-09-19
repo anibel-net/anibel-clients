@@ -138,7 +138,21 @@ public sealed partial class MediaDetailsPage : Page, IRecipient<SessionChangedMe
         }
         TitleText.Text = Vm.DisplayTitle;
         MetaText.Text = Vm.Meta;
-        GenresText.Text = Vm.Genres;
+        GenresText.Inlines.Clear();
+        foreach (var genre in Vm.Media?.Genres ?? [])
+        {
+            if (GenresText.Inlines.Count > 0) GenresText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = " · " });
+            var link = new Microsoft.UI.Xaml.Documents.Hyperlink();
+            link.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = Ui.Genre(genre) });
+            link.Click += (_, _) =>
+            {
+                var type = Vm.Media?.MediaType ?? "anime";
+                var title = type switch { "manga" => Strings.Manga, "cinema" => Strings.Cinema,
+                    "games" => Strings.Games, "books" => Strings.Books, _ => Strings.Anime };
+                Frame.Navigate(typeof(CatalogPage), new CatalogArgs(type, title, genre));
+            };
+            GenresText.Inlines.Add(link);
+        }
         TitleRating.Value = Vm.ShowPersonal && Vm.Media?.IRated is > 0
             ? RatingDisplay.Stars(Vm.Media.IRated.Value) : -1;
         TitleRating.PlaceholderValue = Vm.Media?.Rating is > 0

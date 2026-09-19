@@ -20,6 +20,10 @@ public partial class App : Application
     public static Window? CurrentWindow { get; private set; }
 
     private Window? _window;
+    private IHost? _host;
+    private CoreStatePump? _statePump;
+    private Task _boot = Task.CompletedTask;
+    private bool _stopping;
 
     public App()
     {
@@ -67,7 +71,8 @@ public partial class App : Application
         builder.Services.AddTransient<ProfileViewModel>();
         builder.Services.AddTransient<ProfileListViewModel>();
         builder.Services.AddSingleton<DownloadsViewModel>();
-        Services = builder.Build().Services;
+        _host = builder.Build();
+        Services = _host.Services;
 
         Ui.Load(settings);
 
@@ -76,7 +81,7 @@ public partial class App : Application
         _window.Activate();
         _ = Services.GetRequiredService<DownloadService>();
 
-        _ = BootCoreAsync();
+        _boot = BootCoreAsync();
     }
 
     /// <summary>
@@ -97,7 +102,11 @@ public partial class App : Application
             await Services.GetRequiredService<SearchHistory>().RefreshAsync();
         }
         catch (Exception ex) { await ShowDialogAsync(Strings.CoreErrorTitle, Ui.DisplayMessage(ex)); }
-        StartEventPump();
+        if (!_stopping)
+        {
+            _statePump = new CoreStatePump(Services);
+            _statePump.Start();
+        }
     }
 
     /// <summary>
@@ -148,32 +157,14 @@ public partial class App : Application
         }
     }
 
-    /// <summary>
-    /// Reads core snapshots on the UI thread. Events are optional notifications.
-    /// </summary>
-    private void StartEventPump()
+    internal async Task StopAsync()
     {
-        var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(500);
-        timer.IsRepeating = true;
-        var busy = false;
-        timer.Tick += async (_, _) =>
-        {
-            if (busy) return;
-            busy = true;
-            try
-            {
-                var core = Services.GetRequiredService<CoreClient>();
-                _ = core.DrainEvents();
-                var session = Services.GetRequiredService<SessionService>();
-                var revision = session.Revision;
-                await session.RefreshAsync();
-                if (revision != session.Revision) WeakReferenceMessenger.Default.Send(new SessionChangedMessage());
-                await Services.GetRequiredService<DownloadService>().RefreshAsync();
-            }
-            catch (Exception ex) { Diag.Log($"core state update: {ex.Message}"); }
-            finally { busy = false; }
-        };
-        timer.Start();
+        _stopping = true;
+        await _boot;
+        if (_statePump is not null) await _statePump.StopAsync();
+        await ImageLoader.Shared.StopAsync();
+        if (_host is not null) await Services.GetRequiredService<CoreClient>().DisposeAsync();
+        _host?.Dispose();
+        _host = null;
     }
 }

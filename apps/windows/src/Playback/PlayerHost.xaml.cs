@@ -33,170 +33,23 @@ public sealed partial class PlayerHost : UserControl
     private bool _externalChrome;
     private Views.PlayerArgs? _lastArgs;
     private Task? _opening;
-    private MenuFlyout? _qualityMenu;
-    public bool IsQualityMenuOpen => _qualityMenu?.IsOpen == true;
-
-    public async Task ShowQualityMenuAsync(FrameworkElement anchor)
+    private PlayerSettingsMenu? _settingsMenu;
+    public bool IsQualityMenuOpen => _settingsMenu?.IsOpen == true;
+    public Task ShowQualityMenuAsync(FrameworkElement anchor)
     {
-        var controller = _controller;
-        var engine = controller?.Engine as WindowsMediaEngine;
-        _qualityMenu?.Hide();
-        var menu = _qualityMenu = new MenuFlyout
-        {
-            Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.TopEdgeAlignedRight,
-        };
-        menu.Items.Add(new MenuFlyoutItem { Text = "Загрузка…", IsEnabled = false });
-        menu.ShowAt(anchor);
-        try
-        {
-            if (engine is null)
-            {
-                menu.Items.Clear();
-                menu.Items.Add(new MenuFlyoutItem { Text = "Якасць задаецца ўбудаваным плэерам", IsEnabled = false });
-                return;
-            }
-            var core = App.Services.GetRequiredService<ICoreClient>();
-            var qualities = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks() });
-            if (!ReferenceEquals(controller, _controller) || !ReferenceEquals(engine, controller?.Engine)) { menu.Hide(); return; }
-            menu.Items.Clear();
-            if (_lastArgs is { DownloadId: null, EpisodeId: not null } args)
-            {
-                var download = new MenuFlyoutItem { Text = "Спампаваць MKV", Icon = new SymbolIcon(Symbol.Download) };
-                download.Click += async (_, _) =>
-                {
-                    menu.Hide();
-                    try
-                    {
-                        await App.Services.GetRequiredService<DownloadService>().EnqueueEpisode(new EpisodeDownloadRequest
-                        {
-                            EpisodeId = args.EpisodeId, EpisodeUrl = args.Url,
-                            MediaId = "", MediaType = args.MediaType, Slug = args.Slug,
-                            Title = args.TitleLabel, EpisodeLabel = args.EpisodeLabel,
-                            EpisodeType = args.EpisodeType
-                        });
-                        if (ReferenceEquals(engine, _controller?.Engine))
-                        {
-                            DownloadNotice.Message = "MKV дададзены ў спампоўкі";
-                            DownloadNotice.Severity = InfoBarSeverity.Success;
-                            DownloadNotice.IsOpen = true;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        if (ReferenceEquals(engine, _controller?.Engine))
-                        {
-                            DownloadNotice.Message = Ui.DisplayMessage(ex);
-                            DownloadNotice.Severity = InfoBarSeverity.Error;
-                            DownloadNotice.IsOpen = true;
-                        }
-                    }
-                };
-                menu.Items.Add(download);
-                menu.Items.Add(new MenuFlyoutSeparator());
-            }
-            AddTrackMenu(menu, engine, "Аўдыё",
-                engine.ReadAudioTracks().Select(t => (t.Id, TrackLabel(t.Id, t.Title, t.Lang))),
-                engine.AudioTrack, engine.SetAudioTrack);
-            AddTrackMenu(menu, engine, "Субцітры",
-                new[] { (0L, "Выключаны") }.Concat(engine.ReadSubtitleTracks()
-                    .Select(t => (t.Id, TrackLabel(t.Id, t.Title, t.Lang)))),
-                engine.SubTrack, engine.SetSubTrack);
-            var currentQuality = qualities.Choices.FirstOrDefault(q => q.Selected)?.Label ?? "Аўта";
-            var qualityMenu = new MenuFlyoutSubItem { Text = $"Якасць відэа · {currentQuality}" };
-            menu.Items.Add(qualityMenu);
-            if (engine.IsAdaptive)
-            {
-                var automatic = new MenuFlyoutItem { Text = "Аўта", Icon = engine.IsAutomaticQuality ? new SymbolIcon(Symbol.Accept) : null };
-                automatic.Click += (_, _) =>
-                {
-                    menu.Hide();
-                    if (ReferenceEquals(engine, _controller?.Engine)) engine.SetAutomaticQuality();
-                };
-                qualityMenu.Items.Add(automatic);
-            }
-            foreach (var quality in qualities.Choices)
-            {
-                var item = new MenuFlyoutItem { Text = quality.Label,
-                    Icon = quality.Selected ? new SymbolIcon(Symbol.Accept) : null };
-                item.Click += async (_, _) =>
-                {
-                    menu.Hide();
-                    try
-                    {
-                        if (!ReferenceEquals(engine, _controller?.Engine)) return;
-                        var selection = await core.CallAsync<VideoQualitiesDto>("videoQualities", new { tracks = engine.ReadVideoTracks(), select = quality.Id });
-                        if (ReferenceEquals(engine, _controller?.Engine) && selection.Video is { } id)
-                        {
-                            QualityButton.IsEnabled = false;
-                            QualityLabel.Text = "Пераключэнне…";
-                            await engine.SetVideoTrackAsync(id);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!ReferenceEquals(_qualityMenu, menu) || anchor.XamlRoot is null) return;
-                        menu.Items.Clear();
-                        menu.Items.Add(new MenuFlyoutItem { Text = Ui.DisplayMessage(ex), IsEnabled = false });
-                        menu.ShowAt(anchor);
-                    }
-                    finally
-                    {
-                        QualityButton.IsEnabled = true;
-                        QualityLabel.Text = "Налады";
-                    }
-                };
-                qualityMenu.Items.Add(item);
-            }
-            if (qualities.Choices.Length <= 1)
-            {
-                if (qualities.Choices.Length > 0) qualityMenu.Items.Add(new MenuFlyoutSeparator());
-                qualityMenu.Items.Add(new MenuFlyoutItem { Text = "Іншыя варыянты якасці недаступныя", IsEnabled = false });
-            }
-        }
-        catch (Exception ex)
-        {
-            menu.Items.Clear();
-            menu.Items.Add(new MenuFlyoutItem { Text = Ui.DisplayMessage(ex), IsEnabled = false });
-        }
+        _settingsMenu ??= new PlayerSettingsMenu(() => _controller, () => _lastArgs,
+            changing => { QualityButton.IsEnabled = !changing; QualityLabel.Text = changing ? "Пераключэнне…" : "Налады"; },
+            (message, error) => { DownloadNotice.Message = message; DownloadNotice.Severity = error ? InfoBarSeverity.Error : InfoBarSeverity.Success; DownloadNotice.IsOpen = true; },
+            message => SetStatus(message, error: true));
+        return _settingsMenu.ShowAsync(anchor);
     }
-
     private async void OnQualityClick(object sender, RoutedEventArgs e) => await ShowQualityMenuAsync((FrameworkElement)sender);
-
-    private static string TrackLabel(long id, string title, string language)
-    {
-        var name = string.IsNullOrWhiteSpace(title) ? $"Дарожка {id}" : title.Trim();
-        return string.IsNullOrWhiteSpace(language) ? name : $"{name} · {language}";
-    }
-
-    private void AddTrackMenu(MenuFlyout menu, WindowsMediaEngine engine, string label,
-        IEnumerable<(long Id, string Label)> tracks, long selected, Action<long> select)
-    {
-        var choices = tracks.ToArray();
-        var current = choices.FirstOrDefault(t => t.Id == selected).Label ?? "Не выбрана";
-        var submenu = new MenuFlyoutSubItem { Text = $"{label} · {current}" };
-        foreach (var track in choices)
-        {
-            var item = new MenuFlyoutItem
-            {
-                Text = track.Label, Icon = track.Id == selected ? new SymbolIcon(Symbol.Accept) : null
-            };
-            item.Click += (_, _) =>
-            {
-                menu.Hide();
-                if (!ReferenceEquals(engine, _controller?.Engine)) return;
-                try { select(track.Id); }
-                catch (Exception ex) { SetStatus(Ui.DisplayMessage(ex), error: true); }
-            };
-            submenu.Items.Add(item);
-        }
-        if (submenu.Items.Count == 0)
-            submenu.Items.Add(new MenuFlyoutItem { Text = "Дарожкі недаступныя", IsEnabled = false });
-        menu.Items.Add(submenu);
-    }
 
     public PlayerHost()
     {
         InitializeComponent();
+        SeekSlider.PointerExited += (_, _) => KeyboardNavigation.CloseToolTips(SeekSlider.XamlRoot);
+        SeekSlider.Unloaded += (_, _) => KeyboardNavigation.CloseToolTips(SeekSlider.XamlRoot);
         _hideControls = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _hideControls.Interval = TimeSpan.FromSeconds(2.4);
         _hideControls.IsRepeating = false;
@@ -277,7 +130,7 @@ public sealed partial class PlayerHost : UserControl
 
     public void SetMini(bool mini, bool externalChrome = false)
     {
-        _qualityMenu?.Hide();
+        _settingsMenu?.Hide();
         _mini = mini;
         _externalChrome = externalChrome;
         var state = !mini ? "Theater" : externalChrome ? "Pip" : "Mini";
@@ -303,6 +156,7 @@ public sealed partial class PlayerHost : UserControl
             MiniHover.Visibility = Visibility.Collapsed;
             return;
         }
+        KeyboardNavigation.CloseToolTips(XamlRoot);
         TopBar.Visibility = Visibility.Collapsed;
         BottomBar.Visibility = Visibility.Collapsed;
         MiniHover.Visibility = Visibility.Collapsed;
@@ -328,7 +182,8 @@ public sealed partial class PlayerHost : UserControl
 
     public void Close()
     {
-        _qualityMenu?.Hide();
+        KeyboardNavigation.CloseToolTips(XamlRoot);
+        _settingsMenu?.Hide();
         _controlsHovered = false;
         _hideControls.Stop();
         if (_controller is { } controller) { controller.Dispose(); _pendingClose = Task.WhenAll(_pendingClose, controller.ReportsCompleted); }
@@ -573,6 +428,7 @@ public sealed partial class PlayerHost : UserControl
         {
             return;
         }
+        KeyboardNavigation.CloseToolTips(XamlRoot);
         TopBar.Visibility = Visibility.Collapsed;
         BottomBar.Visibility = Visibility.Collapsed;
     }

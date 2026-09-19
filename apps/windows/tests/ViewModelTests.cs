@@ -170,6 +170,23 @@ public class SearchViewModelTests
 
 public class CatalogViewModelTests
 {
+    [Theory]
+    [InlineData("anime")]
+    [InlineData("manga")]
+    [InlineData("cinema")]
+    [InlineData("books")]
+    [InlineData("games")]
+    public async Task Genre_navigation_filters_the_first_request(string type)
+    {
+        var core = new FakeCoreClient();
+        var vm = new CatalogViewModel(core);
+        await vm.OpenAsync(type, "Catalog", "comedy");
+        Assert.Equal(1, core.MediaListCalls);
+        var filters = System.Text.Json.JsonSerializer.SerializeToElement(core.LastMediaListFilters);
+        Assert.Equal("comedy", filters.GetProperty("genres")[0].GetString());
+        Assert.True(Assert.Single(vm.Filters.Single(f => f.Key == "genres").Choices).IsSelected);
+    }
+
     [Fact]
     public async Task Filters_stay_loading_until_all_options_arrive()
     {

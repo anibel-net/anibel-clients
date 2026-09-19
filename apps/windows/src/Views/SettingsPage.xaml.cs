@@ -10,8 +10,7 @@ namespace Anibel.App.Views;
 
 public sealed partial class SettingsPage : Page
 {
-    private static readonly string[] LangKeys = ["be", "ru", "en"];
-    private static readonly string[] LangNames = ["Беларуская", "Русский", "English"];
+    private static readonly string[] LangKeys = ["be", "ru"];
 
     private readonly CoreClient _core;
     private readonly SettingsService _settings;
@@ -31,7 +30,6 @@ public sealed partial class SettingsPage : Page
         VideoApiUrlBox.Text = _settings.VideoBaseUrl;
         _initialized = true;
 
-        LanguageCombo.SelectionChanged += OnLanguageChanged;
 
         Loaded += async (_, _) =>
         {

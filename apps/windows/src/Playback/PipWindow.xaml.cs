@@ -38,6 +38,8 @@ public sealed partial class PipWindow : Window
     public PipWindow(string title, bool reader)
     {
         InitializeComponent();
+        SeekSlider.PointerExited += (_, _) => KeyboardNavigation.CloseToolTips(SeekSlider.XamlRoot);
+        SeekSlider.Unloaded += (_, _) => KeyboardNavigation.CloseToolTips(SeekSlider.XamlRoot);
         Title = title;
         _reader = reader;
         WindowTitle.Text = title;

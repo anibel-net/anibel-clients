@@ -27,6 +27,10 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
     private ulong _sequence;
     private bool _disposed;
     private Task _reports = Task.CompletedTask;
+    private readonly LinkedList<PlaybackReport> _pendingReports = [];
+    private bool _sendingReports;
+    private readonly List<Task> _engineCleanup = [];
+    private sealed record PlaybackReport(ulong SessionId, ulong Sequence, string Event, double Position, double Duration);
     private readonly HashSet<Task> _starts = [];
 
     public event Action? Ready;
@@ -140,26 +144,36 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
         if (_sessionId == 0)
             return;
         var id = _sessionId;
-        var request = new
-        {
-            sessionId = id,
-            sequence = checked(++_sequence),
-            @event = kind,
-            position = Math.Max(0, position ?? Controls?.Position ?? 0),
-            duration = Math.Max(0, duration ?? Controls?.Duration ?? 0)
-        };
-        _reports = SendAfterAsync(_reports, id, request);
+        var request = new PlaybackReport(id, checked(++_sequence), kind,
+            Math.Max(0, position ?? Controls?.Position ?? 0),
+            Math.Max(0, duration ?? Controls?.Duration ?? 0));
+        if (kind == "position" && _pendingReports.Last is { Value: var last } tail
+            && last.Event == "position" && last.SessionId == id)
+            tail.Value = request;
+        else
+            _pendingReports.AddLast(request);
+        if (!_sendingReports) _reports = SendReportsAsync();
     }
-    private async Task SendAfterAsync(Task previous, ulong id, object request)
+    private async Task SendReportsAsync()
     {
+        _sendingReports = true;
         try
         {
-            await previous;
-            var action = await core.CallAsync<PlaybackActionDto>("playbackReport", request);
-            if (!_disposed && id == _sessionId && action.SeekTo is { } seek)
-                Controls?.Seek(seek);
+            while (_pendingReports.First is { } next)
+            {
+                var request = next.Value;
+                _pendingReports.RemoveFirst();
+                try
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    var action = await core.CallAsync<PlaybackActionDto>("playbackReport", new { sessionId = request.SessionId, sequence = request.Sequence, @event = request.Event, position = request.Position, duration = request.Duration }, timeout.Token);
+                    if (!_disposed && request.SessionId == _sessionId && action.SeekTo is { } seek)
+                        Controls?.Seek(seek);
+                }
+                catch (Exception ex) { Anibel.App.Services.Diag.Log($"playback report: {ex.Message}"); }
+            }
         }
-        catch (Exception ex) { Anibel.App.Services.Diag.Log($"playback report: {ex.Message}"); }
+        finally { _sendingReports = false; }
     }
     public void TogglePause() => Controls?.TogglePause();
     public void Seek(double seconds) => Controls?.Seek(seconds);
@@ -177,6 +191,8 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
         {
             Unwire(engine);
             engine.Dispose();
+            if (engine is WindowsMediaEngine native) _engineCleanup.Add(native.CleanupCompleted);
+            _engineCleanup.RemoveAll(task => task.IsCompletedSuccessfully);
             _engine = null;
         }
     }
@@ -196,6 +212,7 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
         try { await Task.WhenAll(_starts.ToArray()); }
         catch { /* Start errors have already been reported to the view. */ }
         await _reports;
+        await Task.WhenAll(_engineCleanup);
     }
     public void Dispose()
     {

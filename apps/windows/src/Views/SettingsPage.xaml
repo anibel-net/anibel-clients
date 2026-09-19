@@ -20,10 +20,9 @@
             <TextBlock Text="Змяняецца адразу. Калі эфект недаступны, выкарыстоўваецца суцэльны фон."
                        TextWrapping="Wrap" Opacity="0.6" FontSize="12" />
 
-            <ComboBox x:Name="LanguageCombo" Width="220" Header="Мова інтэрфейсу" SelectionChanged="OnLanguageChanged">
+            <ComboBox x:Name="LanguageCombo" Width="220" Header="Мова назваў і апісанняў" SelectionChanged="OnLanguageChanged">
                 <ComboBoxItem Content="Беларуская" />
                 <ComboBoxItem Content="Русский" />
-                <ComboBoxItem Content="English" />
             </ComboBox>
 
             <TextBlock Text="Адрасы API (для распрацоўкі)" Opacity="0.6" />

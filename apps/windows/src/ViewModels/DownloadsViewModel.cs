@@ -91,7 +91,7 @@ public partial class DownloadsViewModel : ObservableObject
 
     private void OnItemChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(DownloadItem.Status)
+        if (e.PropertyName is null or "" or nameof(DownloadItem.DiskBytes) or nameof(DownloadItem.Status)
             or nameof(DownloadItem.Progress)
             or nameof(DownloadItem.ProgressLabel)
             or nameof(DownloadItem.IsCompleted))

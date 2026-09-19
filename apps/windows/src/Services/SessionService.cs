@@ -9,12 +9,12 @@ public sealed record SessionSnapshot(ulong Revision, bool Authenticated, string?
 public sealed class SessionService(ICoreClient core, ICredentialStore credentials)
 {
     private readonly SemaphoreSlim _operations = new(1, 1);
-    private SessionSnapshot _snapshot = new(0, false, null, null, null);
-    public ulong Revision => _snapshot.Revision;
-    public bool HasSession => _snapshot.Authenticated;
-    public string? Username => _snapshot.Username;
-    public string? UserId => _snapshot.UserId;
-    public string? Avatar => _snapshot.Avatar;
+    private SessionSnapshot? _snapshot;
+    public ulong Revision => _snapshot?.Revision ?? 0;
+    public bool HasSession => _snapshot?.Authenticated == true;
+    public string? Username => _snapshot?.Username;
+    public string? UserId => _snapshot?.UserId;
+    public string? Avatar => _snapshot?.Avatar;
 
     public async Task RestoreAsync()
     {
@@ -70,7 +70,7 @@ public sealed class SessionService(ICoreClient core, ICredentialStore credential
     private async Task RefreshLockedAsync()
     {
         var current = await core.CallAsync<SessionSnapshot>("session");
-        if (current.Revision < _snapshot.Revision)
+        if (current == _snapshot || current.Revision < Revision)
             return;
         _snapshot = current;
         if (!current.Authenticated)

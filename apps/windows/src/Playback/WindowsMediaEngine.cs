@@ -21,7 +21,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherQueueTimer _timer;
     private readonly MediaPlayer _player = new();
-    private readonly MediaTimelineController _timeline = new();
+    private MediaTimelineController _timeline = new();
     private readonly NativeSubtitleAssets _assets = new();
     private readonly string _configDirectory;
     private readonly bool _preferDub;
@@ -37,10 +37,12 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     // Timeline.State changes asynchronously. Toggle the user's intent, not its delayed acknowledgement.
     private bool _paused = true;
     private double? _seekTarget;
-    private double? _activeSeek;
+    private bool _changingSource;
+    public Task CleanupCompleted { get; private set; } = Task.CompletedTask;
     private long _subtitle;
     private readonly CancellationTokenSource _lifetime = new();
     private Task _loadTask = Task.CompletedTask;
+    private readonly HashSet<Task> _qualityTasks = [];
 
     public WindowsMediaEngine(ICoreClient core, MediaPlayerElement surface, Image overlay, string configDirectory, bool preferDub)
     {
@@ -54,9 +56,9 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         _player.TimelineController = _timeline;
         _surface.SetMediaPlayer(_player);
         _player.MediaFailed += OnMediaFailed;
-        _player.PlaybackSession.SeekCompleted += OnSeekCompleted;
         _player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
         _timeline.Ended += OnEnded;
+        _timeline.PositionChanged += OnTimelinePositionChanged;
         _timer = _dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.Tick += OnTick;
@@ -71,8 +73,10 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     public bool IsInitialized { get; private set; }
     public bool HasSubs => _assets.Tracks.Count > 0 || (_item?.TimedMetadataTracks.Count ?? 0) > 0;
     public bool IsPaused => _paused;
-    public double Position => _seekTarget ?? _timeline.Position.TotalSeconds;
+    public double Position => _seekTarget ?? ActualPosition;
+    private double ActualPosition => _timeline.Position.TotalSeconds;
     public bool IsSeeking => _seekTarget.HasValue;
+    internal bool IsChangingSource => _changingSource;
     public double Duration => _player.PlaybackSession.NaturalDuration.TotalSeconds;
     public double Volume => (_audio ?? _player).Volume * 100;
     public bool IsMuted => (_audio ?? _player).IsMuted;
@@ -246,7 +250,21 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             }).ToArray();
         return [new(1, _player.PlaybackSession.NaturalVideoWidth, _player.PlaybackSession.NaturalVideoHeight, 0, "", false, true)];
     }
-    public async Task SetVideoTrackAsync(long id)
+    public Task SetVideoTrackAsync(long id)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var task = ChangeVideoTrackAsync(id);
+        _qualityTasks.Add(task);
+        _ = RemoveQualityTaskAsync(task);
+        return task;
+    }
+    private async Task RemoveQualityTaskAsync(Task task)
+    {
+        try { await task; }
+        catch { /* The menu owns error handling. */ }
+        finally { _qualityTasks.Remove(task); }
+    }
+    private async Task ChangeVideoTrackAsync(long id)
     {
         if (_adaptive is null || _manifest is not { } manifest) return;
         var bitrate = checked((uint)id);
@@ -263,6 +281,9 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             if (_disposed) { source.Dispose(); return; }
             _sources.Add(source);
             var position = Position;
+            _changingSource = true;
+            _seekTarget = position;
+            NotifyBuffering();
             var audio = AudioTrack;
             var subtitle = SubTrack;
             var previous = _item!.Source;
@@ -277,11 +298,18 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             ct.ThrowIfCancellationRequested();
             SetAudioTrack(audio);
             SetSubTrack(subtitle);
-            _timeline.Position = TimeSpan.FromSeconds(position);
+            _changingSource = false;
+            StartPendingSeek();
         }
         finally
         {
-            if (!_disposed && !_paused) _timeline.Resume();
+            _changingSource = false;
+            if (!_disposed)
+            {
+                StartPendingSeek();
+                if (!_paused) _timeline.Resume();
+                NotifyBuffering();
+            }
             _qualitySwitch.Release();
         }
     }
@@ -329,36 +357,44 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
 
     private void StartPendingSeek()
     {
-        if (_activeSeek.HasValue || _seekTarget is not { } target) return;
-        _activeSeek = target;
-        _timeline.Position = TimeSpan.FromSeconds(target);
-    }
-
-    private void OnSeekCompleted(MediaPlaybackSession sender, object args) => OnUi(() =>
-    {
-        if (_activeSeek is not { } completed) return;
-        _activeSeek = null;
-        if (_seekTarget == completed) _seekTarget = null;
-        else StartPendingSeek();
+        if (_changingSource || _seekTarget is not { } target) return;
+        // A fresh clock preserves the latest target even when a paused HLS player
+        // has not acknowledged its previous seek. Both players share this clock.
+        var next = new MediaTimelineController { Position = TimeSpan.FromSeconds(target) };
+        _timeline.Ended -= OnEnded;
+        _timeline.PositionChanged -= OnTimelinePositionChanged;
+        _timeline.Pause();
+        _timeline = next;
+        _timeline.Ended += OnEnded;
+        _timeline.PositionChanged += OnTimelinePositionChanged;
+        _player.TimelineController = next;
+        if (_audio is not null) _audio.TimelineController = next;
+        if (!_paused) next.Resume();
+        _seekTarget = null;
         PositionChanged?.Invoke(Position, Duration);
         NotifyBuffering();
-    });
+    }
 
     private void OnPlaybackStateChanged(MediaPlaybackSession sender, object args) => OnUi(() =>
     {
         if (IsInitialized) NotifyBuffering();
     });
-    private void NotifyBuffering() => BufferingChanged?.Invoke(IsSeeking ||
+    private void NotifyBuffering() => BufferingChanged?.Invoke(_changingSource || IsSeeking ||
         _player.PlaybackSession.PlaybackState == MediaPlaybackState.Buffering);
     public void SetVolume(double volume) { if (double.IsFinite(volume)) (_audio ?? _player).Volume = Math.Clamp(volume / 100, 0, 1); }
     public void SetMute(bool mute) => (_audio ?? _player).IsMuted = mute;
     public void Resize(uint width, uint height) => InvalidateSurface();
     public void InvalidateSurface() { if (!_disposed && IsInitialized) DrawSubtitles(); }
-    private void OnTick(DispatcherQueueTimer sender, object args) => PositionChanged?.Invoke(Position, Duration);
+    private void OnTimelinePositionChanged(MediaTimelineController sender, object args) => OnUi(UpdatePosition);
+    private void OnTick(DispatcherQueueTimer sender, object args) => UpdatePosition();
+    private void UpdatePosition()
+    {
+        PositionChanged?.Invoke(Position, Duration);
+    }
     private void OnRendering(object? sender, object args) { if (!_disposed && IsInitialized) DrawSubtitles(); }
     private void DrawSubtitles()
     {
-        try { _subtitles?.Render(Position, _surface.ActualWidth, _surface.ActualHeight, _player.PlaybackSession.NaturalVideoWidth, _player.PlaybackSession.NaturalVideoHeight, _overlay.XamlRoot?.RasterizationScale ?? 1); }
+        try { _subtitles?.Render(ActualPosition, _surface.ActualWidth, _surface.ActualHeight, _player.PlaybackSession.NaturalVideoWidth, _player.PlaybackSession.NaturalVideoHeight, _overlay.XamlRoot?.RasterizationScale ?? 1); }
         catch (Exception ex) { _subtitles?.Load(null); Error?.Invoke($"Subtitle rendering failed: {ex.Message}"); }
     }
     private static string MediaError(MediaPlayerFailedEventArgs args)
@@ -367,7 +403,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     {
         var message = MediaError(args);
         Anibel.App.Services.Diag.Log($"Native playback failed: {message}");
-        OnUi(() => { _seekTarget = _activeSeek = null; BufferingChanged?.Invoke(false); Error?.Invoke(message); });
+        OnUi(() => { _seekTarget = null; BufferingChanged?.Invoke(false); Error?.Invoke(message); });
     }
     private void OnEnded(MediaTimelineController sender, object args) => OnUi(() =>
     {
@@ -387,21 +423,22 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         CompositionTarget.Rendering -= OnRendering;
         _timeline.Pause();
         _timeline.Ended -= OnEnded;
+        _timeline.PositionChanged -= OnTimelinePositionChanged;
         _surface.SetMediaPlayer(null);
         _player.MediaFailed -= OnMediaFailed;
-        _player.PlaybackSession.SeekCompleted -= OnSeekCompleted;
         _player.PlaybackSession.PlaybackStateChanged -= OnPlaybackStateChanged;
         if (_audio is not null) { _audio.MediaFailed -= OnMediaFailed; _audio.Dispose(); }
         _player.Dispose();
         foreach (var source in _sources) source.Dispose();
         _sources.Clear();
         _subtitles?.Dispose();
-        _ = DisposeAssetsAfterLoadAsync();
+        CleanupCompleted = DisposeAssetsAfterLoadAsync();
     }
 
     private async Task DisposeAssetsAfterLoadAsync()
     {
         try { await _loadTask; } catch { /* Load failures have already been reported. */ }
+        try { await Task.WhenAll(_qualityTasks.ToArray()); } catch { /* Cancelled during close. */ }
         _assets.Dispose();
         _lifetime.Dispose();
     }

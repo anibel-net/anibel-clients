@@ -90,9 +90,9 @@ public partial class CatalogViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowErrorState));
     }
 
-    public async Task OpenAsync(string type, string titleText)
+    public async Task OpenAsync(string type, string titleText, string? genre = null)
     {
-        if (MediaType == type && Items.Count > 0)
+        if (genre is null && MediaType == type && Items.Count > 0)
         {
             return;
         }
@@ -110,8 +110,29 @@ public partial class CatalogViewModel : ObservableObject
         Title = titleText;
         ApplyTypeFilters(type);
         BeginImmediateReset();
+        var generation = _generation;
         await Task.Yield();
-        await Task.WhenAll(LoadFilterOptionsAsync(), FetchPageAsync(_generation, reset: true));
+        if (generation != _generation) return;
+        if (genre is null)
+            await Task.WhenAll(LoadFilterOptionsAsync(), FetchPageAsync(_generation, reset: true));
+        else
+        {
+            await LoadFilterOptionsAsync();
+            if (generation != _generation) return;
+            _suppressFilter = true;
+            var genres = Filters.FirstOrDefault(f => f.Key == "genres");
+            var choice = genres?.Choices.FirstOrDefault(c => c.Value == genre);
+            if (choice is null)
+            {
+                var values = (genres?.Choices.Select(c => c.Value) ?? []).Append(genre);
+                if (genres is not null) Filters.Remove(genres);
+                AddFilter("genres", "Жанры", values, Ui.Genre);
+                choice = Filters.Last().Choices.Single(c => c.Value == genre);
+            }
+            choice.IsSelected = true;
+            _suppressFilter = false;
+            await FetchPageAsync(_generation, reset: true);
+        }
     }
 
     private void BeginImmediateReset()

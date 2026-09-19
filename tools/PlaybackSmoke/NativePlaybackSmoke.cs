@@ -112,7 +112,8 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
             cachedImage.ImageOpened += (_, _) => cachedReady.TrySetResult();
             cachedImage.ImageFailed += (_, e) => cachedReady.TrySetException(new InvalidOperationException(e.ErrorMessage));
             overlay.Source = cachedImage;
-            cachedImage.UriSource = new Uri(cachedImagePath);
+            Check(Anibel.App.Services.ImageAddress.TryCreate(@"\\?\" + cachedImagePath, out var posterUri), "Extended poster path was rejected");
+            cachedImage.UriSource = posterUri;
             await cachedReady.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Check(cachedImage.PixelWidth > 0, "Cached poster file did not decode");
             overlay.Source = null;
@@ -164,6 +165,8 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                     config = opened.ConfigDirectory;
                 }
                 using var engine = new WindowsMediaEngine(core, video, overlay, config, preferDub);
+                var positionUpdates = 0;
+                engine.PositionChanged += (_, _) => positionUpdates++;
                 engine.Error += error => failure = error;
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
                 await engine.LoadAsync(intent, subs, timeout.Token);
@@ -183,7 +186,7 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                         await WaitUntilAsync(() => engine.IsPaused, "Pause before subtitle seek failed");
                         subtitlePosition = start.TotalSeconds + 0.2;
                         engine.Seek(subtitlePosition);
-                        await WaitUntilAsync(() => Math.Abs(engine.Position - start.TotalSeconds - 0.2) < 0.1, "Subtitle seek failed");
+                        await WaitUntilAsync(() => !engine.IsSeeking && Math.Abs(video.MediaPlayer.TimelineController.Position.TotalSeconds - start.TotalSeconds - 0.2) < 0.1, "Subtitle seek failed");
                         engine.InvalidateSurface();
                         _results.Add($"SEEK target={start.TotalSeconds + 0.2} actual={engine.Position} duration={engine.Duration}");
                         engine.TogglePause();
@@ -226,7 +229,15 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                     {
                         var positionBefore = engine.Position;
                         var started = System.Diagnostics.Stopwatch.StartNew();
-                        await engine.SetVideoTrackAsync(target.Id);
+                        var change = engine.SetVideoTrackAsync(target.Id);
+                        await WaitUntilAsync(() => change.IsCompleted || engine.IsChangingSource, "Quality switch did not start");
+                        if (!change.IsCompleted)
+                        {
+                            positionBefore = Math.Min(engine.Duration - 0.5, positionBefore + 1);
+                            engine.Seek(positionBefore);
+                        }
+                        await change;
+                        await WaitUntilAsync(() => !engine.IsSeeking, "Quality/seek operation did not finish");
                         Check(engine.IsPaused && engine.AudioTrack == audioBefore && engine.SubTrack == subBefore, "Quality switch changed pause/audio/subtitles");
                         Check(Math.Abs(engine.Position - positionBefore) < 0.5, "Quality switch lost playback position");
                         // HLS can display a separate I-frame rendition while paused. Check normal decoded frames after resume.
@@ -263,13 +274,21 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 engine.Seek(2);
                 engine.Seek(subtitlePosition);
                 Check(Math.Abs(engine.Position - subtitlePosition) < 0.01, "Newest seek was lost");
-                await WaitUntilAsync(() => !engine.IsSeeking, "Seek did not finish");
+                try { await WaitUntilAsync(() => !engine.IsSeeking, "Seek did not finish"); }
+                catch
+                {
+                    _results.Add("SEEK RANGES " + string.Join(",", video.MediaPlayer.PlaybackSession.GetSeekableRanges().Select(r => $"{r.Start.TotalSeconds}+{r.End.TotalSeconds}")));
+                    _results.Add($"SEEK FAILED updates={positionUpdates} requested={subtitlePosition} displayed={engine.Position} timeline={video.MediaPlayer.TimelineController.Position.TotalSeconds} session={video.MediaPlayer.PlaybackSession.Position.TotalSeconds} state={video.MediaPlayer.PlaybackSession.PlaybackState}");
+                    throw;
+                }
+                await Task.Delay(500);
                 Check(Math.Abs(engine.Position - subtitlePosition) < 0.3, "Seek finished at the wrong position");
                 engine.SetSubTrack(0);
                 Check(overlay.Source is null, "Subtitle off failed");
                 engine.SetSubTrack(engine.ReadSubtitleTracks()[0].Id);
                 engine.TogglePause();
                 await WaitUntilAsync(() => !engine.IsPaused, "Resume state failed");
+                await WaitUntilAsync(() => Math.Abs(video.MediaPlayer.PlaybackSession.Position.TotalSeconds - engine.Position) < 1 && engine.Position >= subtitlePosition && engine.Position < subtitlePosition + 20, "Decoded playback did not follow the new seek timeline");
                 var before = overlay.Width;
                 _window!.AppWindow.Resize(new Windows.Graphics.SizeInt32(480, 320));
                 await Task.Delay(350);
@@ -382,6 +401,23 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         var solid = (Border)root.FindName("SolidBackground");
         var search = (AutoSuggestBox)root.FindName("GlobalSearch");
         var account = (Button)root.FindName("AccountButton");
+        var mainPage = (Anibel.App.MainPage)((Frame)root.FindName("RootFrame")).Content;
+        Check(mainPage.KeyboardAcceleratorPlacementMode.ToString() == "Hidden", "Page exposes an Esc tooltip");
+        var contentFrame = (Frame)mainPage.FindName("ContentFrame");
+        contentFrame.Navigate(typeof(Page));
+        var historyCount = contentFrame.BackStack.Count;
+        Check(mainPage.HandleMouseNavigation(Microsoft.UI.Input.PointerUpdateKind.XButton1Released), "Mouse back was ignored");
+        Check(contentFrame.BackStack.Count == historyCount - 1, "Mouse back did not navigate");
+        Check(mainPage.HandleMouseNavigation(Microsoft.UI.Input.PointerUpdateKind.XButton2Released), "Mouse forward was ignored");
+        Check(contentFrame.BackStack.Count == historyCount, "Mouse forward did not navigate");
+        var playerChrome = new PlayerHost();
+        Check(playerChrome.KeyboardAcceleratorPlacementMode.ToString() == "Hidden", "Player exposes a Space tooltip");
+        var tip = new ToolTip { Content = "test", XamlRoot = account.XamlRoot, PlacementTarget = account };
+        ToolTipService.SetToolTip(account, tip);
+        tip.IsOpen = true;
+        await Task.Delay(50);
+        Anibel.App.Services.KeyboardNavigation.CloseToolTips(account.XamlRoot);
+        Check(!tip.IsOpen, "Player tooltip cleanup did not close a tip");
         Check(settings.Background == Anibel.App.Services.WindowBackground.Mica, "Mica must be the default background");
         if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
             Check(shell.SystemBackdrop is Microsoft.UI.Xaml.Media.MicaBackdrop, "Default Mica was not applied");
@@ -429,6 +465,23 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 Check(chapters.ContainerFromIndex(0) is ListViewItem, "Chapter template did not render");
             }
         }
+        var downloads = services.GetRequiredService<Anibel.App.Services.DownloadService>();
+        var row = new Anibel.App.Services.DownloadItem { Id = "ui-test", Title = "Download test", Status = Anibel.App.Services.DownloadStatus.Downloading };
+        downloads.Items.Add(row);
+        var downloadsPage = new Anibel.App.Views.DownloadsPage();
+        _window!.Content = downloadsPage;
+        await Task.Delay(200);
+        row.Apply(new Anibel.App.Services.DownloadItem { Id = row.Id, Title = row.Title,
+            PosterPath = @"\\?\" + Path.Combine(directory, "cached-poster.image"),
+            Status = Anibel.App.Services.DownloadStatus.Completed, CanPlay = true, CanSave = true, DiskBytes = 1024 });
+        await Task.Delay(200);
+        Check(!row.IsActive && row.IsCompleted && row.CanPlay, "Download row did not finish");
+        Check(!downloadsPage.Vm.DiskLabel.EndsWith("0 Б"), "Download disk total is stale");
+        var downloadList = Anibel.App.Services.KeyboardNavigation.Find<ListView>(downloadsPage)!;
+        downloadList.UpdateLayout();
+        var container = (ListViewItem)downloadList.ContainerFromIndex(0);
+        Check(Anibel.App.Services.KeyboardNavigation.Find<ProgressBar>(container) is null, "Completed download still shows progress");
+        _results.Add("PASS extended download poster path and completed download controls");
         var browser = new WebView2();
         _window!.Content = browser;
         var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateWithOptionsAsync(null, Path.Combine(directory, "webview"), new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions());

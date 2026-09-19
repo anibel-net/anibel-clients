@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace Anibel.App.Views;
 
-public sealed record CatalogArgs(string MediaType, string Title);
+public sealed record CatalogArgs(string MediaType, string Title, string? Genre = null);
 
 public sealed partial class CatalogPage : Page
 {
@@ -33,7 +33,7 @@ public sealed partial class CatalogPage : Page
         base.OnNavigatedTo(e);
         if (e.Parameter is CatalogArgs args)
         {
-            await Vm.OpenAsync(args.MediaType, args.Title);
+            await Vm.OpenAsync(args.MediaType, args.Title, args.Genre);
             SyncLanguageFilters();
         }
     }

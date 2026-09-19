@@ -44,6 +44,13 @@ internal static class KeyboardNavigation
         return false;
     }
 
+    internal static void CloseToolTips(XamlRoot? root)
+    {
+        if (root is null) return;
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+            if (popup.Child is ToolTip tip) tip.IsOpen = false;
+    }
+
     internal static T? Find<T>(DependencyObject root) where T : FrameworkElement
     {
         if (root is FrameworkElement { Visibility: Visibility.Collapsed }) return null;

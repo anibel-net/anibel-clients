@@ -15,14 +15,23 @@ internal sealed class ImageDiskCache(string directory, HttpClient client, long c
     private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _pending = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _downloads = new(4);
     private readonly object _files = new();
+    private readonly CancellationTokenSource _lifetime = new();
 
     private string FileName(string url) => Path.Combine(directory, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url))) + ".image");
 
     public async Task<string> GetAsync(string url)
     {
+        _lifetime.Token.ThrowIfCancellationRequested();
         var pending = _pending.GetOrAdd(url, key => new Lazy<Task<string>>(() => DownloadAsync(key)));
         try { return await pending.Value.ConfigureAwait(false); }
         finally { _pending.TryRemove(new KeyValuePair<string, Lazy<Task<string>>>(url, pending)); }
+    }
+
+    public async Task StopAsync()
+    {
+        await _lifetime.CancelAsync();
+        try { await Task.WhenAll(_pending.Values.Where(p => p.IsValueCreated).Select(p => p.Value)); }
+        catch (Exception) { /* Each image caller handles its failure. */ }
     }
 
     public void Invalidate(string url)
@@ -36,17 +45,18 @@ internal sealed class ImageDiskCache(string directory, HttpClient client, long c
     {
         var path = FileName(url);
         if (File.Exists(path)) return path;
-        await _downloads.WaitAsync().ConfigureAwait(false);
+        await _downloads.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             if (File.Exists(path)) return path;
             Directory.CreateDirectory(directory);
-            using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, _lifetime.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is > MaxImageBytes)
                 throw new InvalidDataException("Image exceeds the cache entry limit.");
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
             await using var source = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             long length = 0;
             await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))

@@ -20,10 +20,25 @@ public partial class MediaDetailsViewModel : ObservableObject
     {
         _core = core;
         _session = session;
+        CommentSection = new MediaCommentsViewModel(core, session, () => Media, message => StatusMessage = message);
+        CommentSection.PropertyChanged += (_, e) =>
+        {
+            OnPropertyChanged(e.PropertyName);
+            if (e.PropertyName == nameof(ReplyTarget))
+            {
+                OnPropertyChanged(nameof(HasReplyTarget));
+                OnPropertyChanged(nameof(ReplyLabel));
+            }
+        };
     }
 
     public ObservableCollection<ChapterDto> Chapters { get; } = new();
-    public ObservableCollection<CommentDto> Comments { get; } = new();
+    public MediaCommentsViewModel CommentSection { get; }
+    public ObservableCollection<CommentDto> Comments => CommentSection.Comments;
+    public bool CommentsLoading => CommentSection.CommentsLoading;
+    public bool CommentsEmpty => CommentSection.CommentsEmpty;
+    public bool IsPosting => CommentSection.IsPosting;
+    public CommentDto? ReplyTarget => CommentSection.ReplyTarget;
     public ObservableCollection<string> ResourceLabels { get; } = new();
     public ObservableCollection<EpisodeDto> Episodes { get; } = new();
     public ObservableCollection<MediaCard> Relations { get; } = new();
@@ -85,12 +100,8 @@ public partial class MediaDetailsViewModel : ObservableObject
     [ObservableProperty] private bool showResourceFilter;
     [ObservableProperty] private bool episodesEmpty;
     [ObservableProperty] private bool chaptersEmpty;
-    [ObservableProperty] private bool commentsEmpty;
     [ObservableProperty] private bool episodesLoading;
     [ObservableProperty] private bool chaptersLoading;
-    [ObservableProperty] private bool commentsLoading;
-    [ObservableProperty] private CommentDto? replyTarget;
-    [ObservableProperty] private bool isPosting;
     [ObservableProperty] private bool ratingSaving;
 
     public async Task RefreshPersonalAsync()
@@ -151,12 +162,6 @@ public partial class MediaDetailsViewModel : ObservableObject
     }
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(ShowPageError));
     partial void OnMediaChanged(MediaDetailDto? value) => OnPropertyChanged(nameof(ShowPageError));
-    partial void OnReplyTargetChanged(CommentDto? value)
-    {
-        OnPropertyChanged(nameof(HasReplyTarget));
-        OnPropertyChanged(nameof(ReplyLabel));
-    }
-
     public void BeginLoad()
     {
         IsBusy = true;
@@ -232,49 +237,9 @@ public partial class MediaDetailsViewModel : ObservableObject
         }
     }
 
-    public async Task<bool> AddCommentAsync(string content)
-    {
-        if (IsPosting) return false;
-        if (Media is null || !_session.HasSession)
-        {
-            StatusMessage = Strings.LoginToComment;
-            return false;
-        }
-        var text = content.Trim();
-        if (text.Length == 0)
-        {
-            return false;
-        }
-        var media = Media;
-        var target = ReplyTarget;
-        IsPosting = true;
-        try
-        {
-            await _core.AddCommentAsync(media.MediaId, media.MediaType, text, target?.Id);
-            if (!ReferenceEquals(Media, media)) return true;
-            if (ReferenceEquals(ReplyTarget, target)) CancelReply();
-            // The server owns thread placement. Never insert a reply as a new root.
-            await LoadCommentsAsync(media.MediaId, media.MediaType);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            if (ReferenceEquals(Media, media)) StatusMessage = Ui.DisplayMessage(ex);
-            return false;
-        }
-        finally { IsPosting = false; }
-    }
-
-    public void BeginReply(CommentDto comment)
-    {
-        if (IsPosting || string.IsNullOrWhiteSpace(comment.Id))
-        {
-            return;
-        }
-        ReplyTarget = comment;
-    }
-
-    public void CancelReply() => ReplyTarget = null;
+    public Task<bool> AddCommentAsync(string content) => CommentSection.AddCommentAsync(content);
+    public void BeginReply(CommentDto comment) => CommentSection.BeginReply(comment);
+    public void CancelReply() => CommentSection.CancelReply();
 
     private static void FillRelated(ObservableCollection<MediaCard> target, MediaCard[]? source, string slug)
     {
@@ -351,34 +316,7 @@ public partial class MediaDetailsViewModel : ObservableObject
         }
     }
 
-    private async Task LoadCommentsAsync(string mediaId, string mediaType)
-    {
-        CommentsLoading = true;
-        try
-        {
-            var comments = await _core.CommentsAsync(mediaId, mediaType, 0, 30);
-            if (Media?.MediaId != mediaId || Media.MediaType != mediaType) return;
-            Comments.Clear();
-            foreach (var c in comments.Docs)
-            {
-                Comments.Add(c);
-            }
-            CommentsEmpty = Comments.Count == 0;
-        }
-        catch (Exception ex)
-        {
-            Diag.Log($"MediaDetailsViewModel: comments FAILED {ex}");
-            if (Media?.MediaId == mediaId && Media.MediaType == mediaType)
-            {
-                CommentsEmpty = Comments.Count == 0;
-                StatusMessage = Ui.DisplayMessage(ex);
-            }
-        }
-        finally
-        {
-            CommentsLoading = false;
-        }
-    }
+    private Task LoadCommentsAsync(string mediaId, string mediaType) => CommentSection.LoadCommentsAsync(mediaId, mediaType);
 
     partial void OnSelectedResourceIndexChanged(int value) { if (!_updatingEpisodeChoices) ApplyEpisodeFilter(); }
     partial void OnSelectedKindChanged(string value) { if (!_updatingEpisodeChoices) ApplyEpisodeFilter(); }

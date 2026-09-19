@@ -5,6 +5,9 @@ Param(
 $ErrorActionPreference = 'Stop'
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $project = Join-Path $repository 'apps\windows\src\Anibel.App.csproj'
+foreach ($required in @('target/release/anibel_core.dll', 'apps/windows/src/Assets/ffmpeg/x64/ffmpeg.exe', 'apps/windows/src/Assets/ffmpeg/x64/ffprobe.exe', 'apps/windows/src/Assets/libass/x64/libass-9.dll')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repository $required))) { throw "Missing release dependency: $required" }
+}
 # A fresh folder is essential: publish does not remove old, unused runtime DLLs.
 $staging = Join-Path $repository ('artifacts\windows-publish-' + [Guid]::NewGuid().ToString('N'))
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'

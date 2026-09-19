@@ -7,6 +7,25 @@ namespace Anibel.App.Tests;
 public class PlayerControllerTests
 {
     [Fact]
+    public async Task Slow_reports_keep_latest_position_and_preserve_lifecycle_events()
+    {
+        var pending = new TaskCompletionSource<object?>();
+        var core = new FakeCoreClient { Handler = (op, args, ct) => pending.Task };
+        var engine = new FakeEngine { Duration = 2000 };
+        using var controller = new PlayerController(core);
+        controller.AttachForTesting(engine, 9);
+        engine.RaiseReady();
+        for (var i = 1; i <= 1000; i++) engine.RaisePositionChanged(i, 2000);
+        engine.RaiseEnded();
+        controller.Dispose();
+        Assert.Single(core.Calls);
+        pending.SetResult(new PlaybackActionDto(null));
+        await controller.ReportsCompleted;
+        Assert.Equal(new[] { "ready", "position", "ended", "close" }, core.Calls.Select(c => c.Args.GetProperty("event").GetString()));
+        Assert.Equal(1000, core.Calls[1].Args.GetProperty("position").GetDouble());
+    }
+
+    [Fact]
     public async Task Reports_are_ordered_and_core_seek_is_applied()
     {
         var core = new FakeCoreClient { Handler = (op, args, ct) => Task.FromResult<object?>(new PlaybackActionDto(95)) };

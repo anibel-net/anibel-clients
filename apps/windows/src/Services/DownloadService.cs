@@ -19,18 +19,20 @@ public sealed class DownloadService(ICoreClient core)
         {
             var snapshot = await core.CallAsync<Snapshot>("downloads");
             Root = snapshot.Root;
-            foreach (var old in Items.Where(i => !snapshot.Items.Any(s => s.Id == i.Id)).ToArray())
+            var incoming = snapshot.Items.Select(i => i.Id).ToHashSet();
+            foreach (var old in Items.Where(i => !incoming.Contains(i.Id)).ToArray())
                 Items.Remove(old);
+            var byId = Items.ToDictionary(i => i.Id);
             for (var index = 0; index < snapshot.Items.Length; index++)
             {
                 var source = snapshot.Items[index];
-                var existing = Items.FirstOrDefault(i => i.Id == source.Id);
+                byId.TryGetValue(source.Id, out var existing);
                 if (existing is null)
                     Items.Insert(index, source);
                 else
                 {
                     existing.Apply(source);
-                    if (Items.IndexOf(existing) != index)
+                    if (!ReferenceEquals(Items[index], existing))
                         Items.Move(Items.IndexOf(existing), index);
                 }
             }

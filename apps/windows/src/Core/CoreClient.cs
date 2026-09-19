@@ -10,7 +10,7 @@ namespace Anibel.App.Core;
 /// executed on the thread pool: { id, op, args } -> { id, ok, value | error }.
 /// Logs go to %TEMP%\anibel-debug.log with secrets redacted.
 /// </summary>
-public sealed class CoreClient : ICoreClient, IDisposable
+public sealed class CoreClient : ICoreClient, IDisposable, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) } };
     private readonly SettingsService _settings;
@@ -18,6 +18,8 @@ public sealed class CoreClient : ICoreClient, IDisposable
     private long _handle = -1;
     private long _nextId;
     private bool _disposed;
+    private readonly HashSet<Task> _requests = [];
+    private Task? _shutdown;
 
     public CoreClient(SettingsService settings)
     {
@@ -98,7 +100,25 @@ public sealed class CoreClient : ICoreClient, IDisposable
     public Task ClearCacheAsync(CancellationToken ct = default)
         => CallAsync<JsonElement>("clearCache", ct: ct);
 
-    private async Task<JsonElement> CallRawCoreAsync(long requestId, string requestJson, CancellationToken ct)
+    private Task<JsonElement> CallRawCoreAsync(long requestId, string requestJson, CancellationToken ct)
+    {
+        lock (_initLock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var request = ExecuteRequestAsync(requestId, requestJson, ct);
+            _requests.Add(request);
+            _ = RemoveRequestAsync(request);
+            return request;
+        }
+    }
+    private async Task RemoveRequestAsync(Task request)
+    {
+        try { await request.ConfigureAwait(false); }
+        catch { /* The request caller owns error handling. */ }
+        finally { lock (_initLock) _requests.Remove(request); }
+    }
+
+    private async Task<JsonElement> ExecuteRequestAsync(long requestId, string requestJson, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var handle = EnsureHandle();
@@ -292,13 +312,21 @@ public sealed class CoreClient : ICoreClient, IDisposable
     public Task<StatusCountersDto?> StatusAsync(string username, string mediaType, CancellationToken ct = default)
         => CallAsync<StatusCountersDto?>("status", new { username, mediaType }, ct);
 
-    public void Dispose()
+    public void Dispose() => _ = DisposeAsync();
+
+    public ValueTask DisposeAsync()
     {
-        _disposed = true;
-        var h = Interlocked.Exchange(ref _handle, -1);
-        if (h >= 0)
+        lock (_initLock)
         {
-            AnibelCoreNative.anibel_core_shutdown(h);
+            _disposed = true;
+            return new ValueTask(_shutdown ??= ShutdownAsync(_requests.ToArray()));
         }
+    }
+    private async Task ShutdownAsync(Task[] requests)
+    {
+        try { await Task.WhenAll(requests).ConfigureAwait(false); }
+        catch { /* Request callers own their failures. */ }
+        var handle = Interlocked.Exchange(ref _handle, -1);
+        if (handle >= 0) AnibelCoreNative.anibel_core_shutdown(handle);
     }
 }

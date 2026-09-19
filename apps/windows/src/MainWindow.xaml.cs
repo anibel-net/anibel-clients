@@ -90,6 +90,12 @@ public sealed partial class MainWindow : Window,
     public MainWindow()
     {
         InitializeComponent();
+        WindowRoot.AddHandler(UIElement.PointerReleasedEvent,
+            new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+            {
+                if (RootFrame.Content is MainPage page &&
+                    page.HandleMouseNavigation(e.GetCurrentPoint(WindowRoot).Properties.PointerUpdateKind)) e.Handled = true;
+            }), true);
         ApplyBackground();
         GlobalSearch.AddHandler(UIElement.PointerPressedEvent,
             new Microsoft.UI.Xaml.Input.PointerEventHandler(OnSearchPointerPressed), true);
@@ -135,7 +141,11 @@ public sealed partial class MainWindow : Window,
             e.Cancel = true;
             if (closePhase == ClosePhase.Waiting) return;
             closePhase = ClosePhase.Waiting;
-            try { if (RootFrame.Content is MainPage page) await page.ClosePlaybackAsync(); }
+            try
+            {
+                if (RootFrame.Content is MainPage page) await page.ClosePlaybackAsync();
+                if (Application.Current is App app) await app.StopAsync();
+            }
             finally { closePhase = ClosePhase.Complete; DispatcherQueue.TryEnqueue(Close); }
         };
         Closed += (_, _) =>

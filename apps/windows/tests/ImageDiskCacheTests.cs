@@ -47,6 +47,19 @@ public sealed class ImageDiskCacheTests : IDisposable
     public void Seek_tooltip_shows_time(double seconds, string expected)
         => Assert.Equal(expected, PlaybackTimeConverter.Format(seconds));
 
+    [Fact]
+    public async Task Shutdown_cancels_active_and_waiting_images()
+    {
+        using var handler = new ImageHandler { Delay = Timeout.Infinite };
+        using var client = new HttpClient(handler);
+        var cache = new ImageDiskCache(_directory, client);
+        var requests = Enumerable.Range(0, 8).Select(i => cache.GetAsync($"https://example.org/{i}")).ToArray();
+        await cache.StopAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        foreach (var request in requests) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        Assert.Empty(Directory.GetFiles(_directory));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cache.GetAsync("https://example.org/new"));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);
@@ -56,10 +69,11 @@ public sealed class ImageDiskCacheTests : IDisposable
     {
         public int Requests;
         public bool Fail;
+        public int Delay = 10;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref Requests);
-            await Task.Delay(10, cancellationToken);
+            await Task.Delay(Delay, cancellationToken);
             return new HttpResponseMessage(Fail ? HttpStatusCode.BadGateway : HttpStatusCode.OK)
             { Content = new ByteArrayContent([1, 2, 3]) };
         }

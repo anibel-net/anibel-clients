@@ -3,9 +3,9 @@ name: windows
 on:
   push:
     branches: [main]
-    paths: ["apps/windows/**", "core/**", "crates/**", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", ".github/workflows/windows.yml"]
   pull_request:
-    paths: ["apps/windows/**", "core/**", "crates/**", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", ".github/workflows/windows.yml"]
 
 jobs:
   build:
@@ -26,6 +26,29 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make curl tar diffutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-libass
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-python
+
+      - name: Prepare native playback dependencies
+        shell: msys2 {0}
+        working-directory: .
+        run: |
+          bash scripts/build-ffmpeg-small.sh
+          mkdir -p apps/windows/src/Assets/ffmpeg/x64
+          cp -r artifacts/ffmpeg-small/runtime/. apps/windows/src/Assets/ffmpeg/x64/
+          bash scripts/fetch-libass.sh
+
       - name: Build core (release)
         run: cargo build --release -p anibel-core
         working-directory: .
@@ -37,27 +60,28 @@ jobs:
         run: dotnet test tests/Anibel.App.Tests.csproj -c Release -p:Platform=x64
         working-directory: apps/windows
 
-      # UI smoke — Debug build of the app + UiSmoke driver, best-effort (non-blocking)
-      - name: Build app (Debug, x64) for UI smoke
-        run: dotnet build Anibel.App.csproj -c Debug -p:Platform=x64
-        continue-on-error: true
-
-      - name: Build UiSmoke (Debug)
-        run: dotnet build tools/UiSmoke/UiSmoke.csproj -c Debug
+      - name: Publish native playback smoke build
         working-directory: .
-        continue-on-error: true
+        run: dotnet publish apps/windows/src/Anibel.App.csproj -c Release -r win-x64 -p:Platform=x64 -p:EnablePlaybackSmoke=true -p:IntermediateOutputPath=obj/ci-smoke/ -o artifacts/playback-smoke
 
-      - name: UI smoke (best-effort)
-        run: .\tools\UiSmoke\bin\Debug\net10.0-windows10.0.19041.0\UiSmoke.exe
+      - name: Generate local playback fixtures
+        shell: msys2 {0}
         working-directory: .
-        env:
-          ANIBEL_APP_EXE: apps/windows/src/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Anibel.App.exe
-        continue-on-error: true
+        run: python tools/PlaybackSmoke/create-fixtures.py --ffmpeg "$(cygpath -w /ucrt64/bin/ffmpeg.exe)"
+
+      - name: Native playback smoke (required)
+        working-directory: .
+        run: scripts/test-windows-playback.ps1 -AppExe artifacts/playback-smoke/Anibel.Net.exe
+
+      - name: Publish share archive
+        working-directory: .
+        run: scripts/publish-windows.ps1
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: anibel-windows-x64
           path: |
-            apps/windows/src/bin/x64/Release/net10.0-windows*/**
+            artifacts/share/Anibel-Windows-x64.zip
+            artifacts/share/Anibel-Windows-x64.zip.sha256
           if-no-files-found: error
