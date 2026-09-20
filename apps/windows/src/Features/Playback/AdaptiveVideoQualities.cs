@@ -7,6 +7,12 @@ namespace Anibel.App.Playback;
 
 internal static class AdaptiveVideoQualities
 {
+    // Windows cannot decode these H.264 profiles. Select the software path before
+    // attaching the source: some adaptive sources fail in native callbacks first.
+    internal static bool RequiresSoftwareDecoder(string selectedManifest) => Regex.IsMatch(selectedManifest,
+        """codecs\s*=\s*["'][^"']*\bavc[13]\.(?:6e|7a|f4)[0-9a-f]{4}\b""",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     // Read resolution metadata without downloading media segments.
     internal static Dictionary<uint, (uint Width, uint Height)> Parse(string manifest)
     {

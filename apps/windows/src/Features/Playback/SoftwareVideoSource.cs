@@ -5,6 +5,11 @@ namespace Anibel.App.Playback;
 internal sealed class SoftwareVideoSource(FFmpegMediaSource decoder, string? manifestPath) : IDisposable
 {
     public FFmpegMediaSource Decoder { get; } = decoder;
+    // Snapshot metadata before playback starts. CurrentVideoStream takes the decoder's
+    // read/seek lock and must never be queried by the UI rendering loop.
+    public double Duration { get; } = decoder.Duration.TotalSeconds;
+    public VideoTrackInfo[] VideoTracks { get; } = decoder.VideoStreams.Select((t, i) =>
+        new VideoTrackInfo(i + 1, t.PixelWidth, t.PixelHeight, t.Bitrate, "", false, false)).ToArray();
     public static async Task<SoftwareVideoSource> OpenAsync(string path,
         (byte[] Data, Uri Uri, string ContentType)? manifestData,
         IReadOnlyDictionary<uint, (uint Width, uint Height)> videoSizes, uint? bitrate, CancellationToken ct)
@@ -12,6 +17,7 @@ internal sealed class SoftwareVideoSource(FFmpegMediaSource decoder, string? man
         Anibel.App.Services.Diag.Log("Software decoder: opening source");
         var config = new MediaSourceConfig();
         config.Video.VideoDecoderMode = VideoDecoderMode.ForceFFmpegSoftwareDecoder;
+        config.General.FastSeek = false;
         config.General.FastSeekSmartStreamSwitching = false;
         config.Subtitles.UseEmbeddedSubtitleFonts = false; // libass owns extracted fonts.
         config.FFmpegOptions["rw_timeout"] = "15000000";

@@ -314,3 +314,8 @@ tests. The Windows local fixture suite checks decoded frames, subtitles, seek,
 quality and PiP. Android local device tests check JNI lifetime, execution permission,
 rendered video, audio-track presence, seek and close. Required CI checks use local
 fixtures; optional live checks are separate.
+
+`playbackOpen` and `resolveEpisode` accept optional `preferDash` (default false).
+Windows requests DASH when the service advertises it, with HLS as fallback.
+Android and source downloads keep HLS as their default. Source addresses come
+from the video service; clients must not guess alternate manifest paths.

@@ -50,6 +50,8 @@ pub(super) struct Open {
     #[serde(default)]
     pub prefer_dub: Option<bool>,
     pub episode_type: Option<String>,
+    #[serde(default)]
+    pub prefer_dash: bool,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -162,7 +164,11 @@ impl Playback {
                 config,
             )
         } else {
-            let intent = player::resolve_intent(video, &json!({"url":args.url})).await?;
+            let intent = player::resolve_intent(
+                video,
+                &json!({"url":args.url,"preferDash":args.prefer_dash}),
+            )
+            .await?;
             let folder = format!("playback/{}", digest(&args.url));
             let config = self.storage.path(&folder)?;
             std::fs::create_dir_all(config.join("fonts")).map_err(super::storage::io_error)?;

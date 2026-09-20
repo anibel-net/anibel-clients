@@ -40,6 +40,8 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     // Timeline.State changes asynchronously. Toggle the user's intent, not its delayed acknowledgement.
     private bool _paused = true;
     private double? _seekTarget;
+    private double? _activeSeekTarget;
+    private readonly HashSet<MediaPlaybackSession> _seekingSessions = [];
     private double _duration;
     private bool _changingSource;
     private readonly HashSet<MediaPlaybackSession> _bufferingSessions = [];
@@ -90,7 +92,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         get
         {
             // Keep the timeline range while a failed or replaced source has no metadata.
-            if (_softwareSource is not null) return _softwareSource.Decoder.Duration.TotalSeconds;
+            if (_softwareSource is not null) return _softwareSource.Duration;
             try
             {
                 var duration = _player.PlaybackSession.NaturalDuration.TotalSeconds;
@@ -179,7 +181,21 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
 
     private async Task OpenVideoAsync(string path, CancellationToken ct)
     {
-        _item = new MediaPlaybackItem(await CreateSourceAsync(path, true, ct));
+        var nativeSource = await CreateSourceAsync(path, true, ct);
+        if (_manifest is { } manifest && _videoSizes.Count > 0)
+        {
+            var selected = _videoSizes.OrderByDescending(t => t.Value.Height)
+                .ThenByDescending(t => t.Value.Width).ThenByDescending(t => t.Key).First().Key;
+            var rendition = AdaptiveVideoQualities.Select(System.Text.Encoding.UTF8.GetString(manifest.Data), manifest.Uri, selected);
+            if (AdaptiveVideoQualities.RequiresSoftwareDecoder(rendition))
+            {
+                _sources.Remove(nativeSource);
+                nativeSource.Dispose();
+                await OpenSoftwareVideoAsync(path, ct);
+                return;
+            }
+        }
+        _item = new MediaPlaybackItem(nativeSource);
         var opened = WaitForOpenAsync(_player, ct);
         _player.Source = _item;
         try { await opened; }
@@ -201,6 +217,8 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             throw new ObjectDisposedException(nameof(WindowsMediaEngine));
         }
         var decoder = source.Decoder;
+        _activeSeekTarget = null;
+        _seekingSessions.Clear();
         _player.Source = null;
         if (_item is not null)
         {
@@ -346,14 +364,13 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     {
         if (_softwareSource is not null && _manifest is not null && _videoSizes.Count > 0)
         {
-            var current = _softwareSource.Decoder.CurrentVideoStream;
+            var current = _softwareSource.VideoTracks.ElementAtOrDefault(_item?.VideoTracks.SelectedIndex ?? 0);
             return _videoSizes.Select(t => new VideoTrackInfo(t.Key, t.Value.Width, t.Value.Height, t.Key, "", false,
-                t.Value.Width == current.PixelWidth && t.Value.Height == current.PixelHeight)).ToArray();
+                t.Value.Width == current?.Width && t.Value.Height == current?.Height)).ToArray();
         }
         if (_softwareSource is not null)
-            return _softwareSource.Decoder.VideoStreams.Select((t, i) => new VideoTrackInfo(i + 1,
-                checked((uint)t.PixelWidth), checked((uint)t.PixelHeight), t.Bitrate, "", false,
-                _item?.VideoTracks.SelectedIndex == i)).ToArray();
+            return _softwareSource.VideoTracks.Select((track, i) => track with
+                { Selected = _item?.VideoTracks.SelectedIndex == i }).ToArray();
         if (IsAdaptive)
             return _adaptive!.AvailableBitrates.Where(b => b > 0).Distinct().Select(b =>
             {
@@ -502,9 +519,17 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
 
     private void StartPendingSeek()
     {
-        if (_changingSource || _seekTarget is not { } target) return;
+        if (_changingSource || _activeSeekTarget.HasValue || _seekTarget is not { } target) return;
         // A fresh clock preserves the latest target even when a paused HLS player
         // has not acknowledged its previous seek. Both players share this clock.
+        // MediaStreamSource acknowledges exact seeks. Windows adaptive sources may
+        // omit SeekCompleted while paused; their shared timeline owns that transition.
+        if (_softwareSource is not null)
+        {
+            _activeSeekTarget = target;
+            _seekingSessions.Add(_player.PlaybackSession);
+            if (_audio is not null) _seekingSessions.Add(_audio.PlaybackSession);
+        }
         var next = new MediaTimelineController { Position = TimeSpan.FromSeconds(target) };
         _timeline.Ended -= OnEnded;
         _timeline.PositionChanged -= OnTimelinePositionChanged;
@@ -514,10 +539,21 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         _timeline.PositionChanged += OnTimelinePositionChanged;
         _player.TimelineController = next;
         if (_audio is not null) _audio.TimelineController = next;
-        _seekTarget = null;
+        if (_softwareSource is null) _seekTarget = null;
         PositionChanged?.Invoke(Position, Duration);
         NotifyBuffering();
     }
+
+    private void OnSeekCompleted(MediaPlaybackSession sender, object args) => OnUi(() =>
+    {
+        if (!_seekingSessions.Remove(sender) || _seekingSessions.Count > 0) return;
+        var completed = _activeSeekTarget;
+        _activeSeekTarget = null;
+        if (_seekTarget == completed) _seekTarget = null;
+        else StartPendingSeek();
+        PositionChanged?.Invoke(Position, Duration);
+        NotifyBuffering();
+    });
 
     private void OnPlaybackStateChanged(MediaPlaybackSession sender, object args) => OnUi(() =>
     {
@@ -525,12 +561,14 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     });
     private void ObserveBuffering(MediaPlaybackSession session)
     {
+        session.SeekCompleted += OnSeekCompleted;
         session.PlaybackStateChanged += OnPlaybackStateChanged;
         session.BufferingStarted += OnBufferingStarted;
         session.BufferingEnded += OnBufferingEnded;
     }
     private void StopObservingBuffering(MediaPlaybackSession session)
     {
+        session.SeekCompleted -= OnSeekCompleted;
         session.PlaybackStateChanged -= OnPlaybackStateChanged;
         session.BufferingStarted -= OnBufferingStarted;
         session.BufferingEnded -= OnBufferingEnded;
@@ -575,8 +613,9 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         uint width, height;
         try
         {
-            width = _softwareSource is not null ? checked((uint)_softwareSource.Decoder.CurrentVideoStream.PixelWidth) : _player.PlaybackSession.NaturalVideoWidth;
-            height = _softwareSource is not null ? checked((uint)_softwareSource.Decoder.CurrentVideoStream.PixelHeight) : _player.PlaybackSession.NaturalVideoHeight;
+            var softwareTrack = _softwareSource?.VideoTracks.ElementAtOrDefault(_item?.VideoTracks.SelectedIndex ?? 0);
+            width = softwareTrack is not null ? checked((uint)softwareTrack.Width) : _player.PlaybackSession.NaturalVideoWidth;
+            height = softwareTrack is not null ? checked((uint)softwareTrack.Height) : _player.PlaybackSession.NaturalVideoHeight;
         }
         catch (System.Runtime.InteropServices.COMException) { return; } // MediaFailed owns decoder errors.
         try { _subtitles.Render(ActualPosition, _surface.ActualWidth, _surface.ActualHeight, width, height); }
@@ -609,6 +648,8 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         IsInitialized = false;
         _paused = true;
         _seekTarget = null;
+        _activeSeekTarget = null;
+        _seekingSessions.Clear();
         _changingSource = false;
         _bufferingSessions.Clear();
         _timeline.Pause();

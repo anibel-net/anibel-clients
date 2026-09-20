@@ -121,10 +121,17 @@ pub struct VideoInfo {
 }
 
 impl VideoInfo {
-    /// Absolute URL of the primary stream. HLS (m3u8) preferred, DASH (mpd)
-    /// fallback — relative to the owning CDN node.
-    pub fn primary_stream(&self) -> Option<String> {
-        let path = self.hls.as_deref().or(self.stream.as_deref())?;
+    /// Use the host's preferred format, with the other format as fallback.
+    pub fn primary_stream(&self, prefer_dash: bool) -> Option<String> {
+        let (preferred, fallback) = if prefer_dash {
+            (&self.stream, &self.hls)
+        } else {
+            (&self.hls, &self.stream)
+        };
+        let path = preferred
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| fallback.as_deref().filter(|s| !s.is_empty()))?;
         Some(join_host(self.host.as_deref(), path))
     }
 
@@ -202,6 +209,28 @@ pub fn join_host(host: Option<&str>, path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stream_preference_preserves_download_default_and_falls_back() {
+        let mut info = VideoInfo {
+            host: Some("https://example.test".into()),
+            hls: Some("/master.m3u8".into()),
+            stream: Some("/manifest.mpd".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            info.primary_stream(false).as_deref(),
+            Some("https://example.test/master.m3u8")
+        );
+        assert_eq!(
+            info.primary_stream(true).as_deref(),
+            Some("https://example.test/manifest.mpd")
+        );
+        info.stream = Some(String::new());
+        assert_eq!(info.primary_stream(true), info.primary_stream(false));
+        info.hls = None;
+        assert_eq!(info.primary_stream(true), None);
+    }
 
     #[test]
     fn join_host_absolute_url_passthrough() {

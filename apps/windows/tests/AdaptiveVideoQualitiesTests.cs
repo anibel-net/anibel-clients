@@ -5,6 +5,19 @@ namespace Anibel.App.Tests;
 
 public class AdaptiveVideoQualitiesTests
 {
+    [Theory]
+    [InlineData("avc1.6E0028", true)]
+    [InlineData("avc3.6e002a", true)]
+    [InlineData("avc1.7a0028", true)]
+    [InlineData("avc1.f40028", true)]
+    [InlineData("avc1.640028", false)]
+    [InlineData("avc1.4d401f", false)]
+    public void Unsupported_profiles_bypass_the_Windows_decoder(string codec, bool software)
+    {
+        Assert.Equal(software, AdaptiveVideoQualities.RequiresSoftwareDecoder($"<Representation codecs=\"{codec}\" />"));
+        Assert.Equal(software, AdaptiveVideoQualities.RequiresSoftwareDecoder($"#EXT-X-STREAM-INF:CODECS=\"{codec},mp4a.40.2\""));
+    }
+
     [Fact]
     public void Hls_maps_peak_bitrates_to_resolution_and_ignores_other_playlists()
     {

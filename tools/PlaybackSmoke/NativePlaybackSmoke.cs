@@ -182,17 +182,26 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 var config = directory;
                 if (source.Contains("video.anibel.net/", StringComparison.OrdinalIgnoreCase))
                 {
-                    var opened = await core.CallAsync<OpenPlaybackDto>("playbackOpen", new { url = source, episodeType = preferDub ? "dub" : "sub" });
+                    var opened = await core.CallAsync<OpenPlaybackDto>("playbackOpen", new { url = source, episodeType = preferDub ? "dub" : "sub", preferDash = true });
                     intent = opened.Intent;
                     subs = opened.SubtitlePaths;
                     config = opened.ConfigDirectory;
                 }
+                File.AppendAllText(Path.Combine(directory, "progress.txt"), "Opening source\n");
                 using var engine = new WindowsMediaEngine(core, video, overlay, config, preferDub);
+                var seekAcknowledgements = 0;
+                var audioSeekAcknowledgements = 0;
+                video.MediaPlayer.PlaybackSession.SeekCompleted += (_, _) => Interlocked.Increment(ref seekAcknowledgements);
                 var positionUpdates = 0;
                 engine.PositionChanged += (_, _) => positionUpdates++;
                 engine.Error += error => failure = error;
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
                 await engine.LoadAsync(intent, subs, timeout.Token);
+                File.AppendAllText(Path.Combine(directory, "progress.txt"), "Source opened\n");
+                var separateAudio = (Windows.Media.Playback.MediaPlayer?)typeof(WindowsMediaEngine)
+                    .GetField("_audio", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(engine);
+                if (separateAudio is not null)
+                    separateAudio.PlaybackSession.SeekCompleted += (_, _) => Interlocked.Increment(ref audioSeekAcknowledgements);
                 await WaitUntilAsync(() => failure is not null || (engine.Position > 0.2 && engine.Duration > 3), "Playback clock/duration failed");
                 try { await WaitUntilAsync(() =>
                 {
@@ -327,8 +336,11 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 var stopped = engine.Position;
                 await Task.Delay(300);
                 Check(Math.Abs(engine.Position - stopped) < 0.1, "Pause failed");
+                var acknowledgementsBeforeSeek = Volatile.Read(ref seekAcknowledgements);
+                var audioAcknowledgementsBeforeSeek = Volatile.Read(ref audioSeekAcknowledgements);
                 engine.Seek(engine.Duration / 2);
                 Check(Math.Abs(engine.Position - engine.Duration / 2) < 0.01, "Seek position did not update immediately");
+                if (engine.IsSoftwareDecoding) Check(engine.IsSeeking && engine.IsBuffering, "Software seek was acknowledged before decoding completed");
                 var seekDispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 video.DispatcherQueue.TryEnqueue(() => seekDispatched.TrySetResult());
                 await seekDispatched.Task;
@@ -356,6 +368,20 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                     throw;
                 }
                 Check(failure is null, failure ?? "");
+                if (engine.IsSoftwareDecoding)
+                {
+                    Check(Volatile.Read(ref seekAcknowledgements) > acknowledgementsBeforeSeek,
+                        "Software seek completed without a native acknowledgement");
+                    Check(Math.Abs(video.MediaPlayer.PlaybackSession.Position.TotalSeconds - engine.Position) < 0.15,
+                        "Software video clock disagrees with the seek position");
+                    if (separateAudio is not null)
+                    {
+                        Check(Volatile.Read(ref audioSeekAcknowledgements) > audioAcknowledgementsBeforeSeek,
+                            "Separate audio seek was not acknowledged");
+                        Check(Math.Abs(separateAudio.PlaybackSession.Position.TotalSeconds - video.MediaPlayer.PlaybackSession.Position.TotalSeconds) < 0.15,
+                            "Separate audio and video clocks disagree after seek");
+                    }
+                }
                 var before = overlay.Width;
                 _window!.AppWindow.Resize(new Windows.Graphics.SizeInt32(480, 320));
                 await WaitUntilAsync(() => overlay.Width < before || before < 480,

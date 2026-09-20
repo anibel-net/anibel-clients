@@ -161,7 +161,11 @@ pub async fn resolve_intent(
         .map_err(|e| AnibelError::Transport(format!("video service: {e}")))?;
 
     let video_src = info
-        .primary_stream()
+        .primary_stream(
+            args.get("preferDash")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        )
         .ok_or_else(|| AnibelError::Transport(format!("video {video_id}: no hls/stream")))?;
 
     let subtitles: Vec<SubtitleTrack> = info
@@ -281,6 +285,7 @@ mod tests {
                         { "path": "/subtitles/8c52d132/субцітры.ass", "fonts": [] }
                     ],
                     "hls": "/dash/8c52d132/manifest.m3u8",
+                    "stream": "/dash/8c52d132/manifest.mpd",
                     "host": "https://n3.anibel.stream"
                 }));
             })
@@ -321,7 +326,19 @@ mod tests {
         assert_eq!(intent.fonts[0].family, "Montserrat");
         assert_eq!(intent.duration_secs, Some(600.0));
 
-        m1.assert_async().await;
-        m2.assert_async().await;
+        let dash = resolve_intent(
+            &svc,
+            &serde_json::json!({
+                "videoId":"8c52d132-955a-445c-8fa7-2f5739e141d8", "preferDash":true
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            dash.video_src.as_deref(),
+            Some("https://n3.anibel.stream/dash/8c52d132/manifest.mpd")
+        );
+        m1.assert_hits_async(2).await;
+        m2.assert_hits_async(2).await;
     }
 }

@@ -45,3 +45,10 @@ SoftwareVideoSource owns the decoder and its temporary manifest. SubtitlePresent
 owns subtitle assets and rendering. The media engine remains the single timeline owner.
 CoreStatePump uses snapshots as state and events as diagnostic notifications. It polls
 active jobs more frequently than an idle library.
+
+Windows prefers advertised DASH sources. Known unsupported H.264 profiles in
+manifest metadata enter software decoding before a Windows decoder is attached.
+SoftwareVideoSource captures stream metadata before playback starts; the UI must
+not call decoder getters that take the read/seek lock. Software seeks use exact
+timestamps and keep the loader active until native video and separate audio
+acknowledge the seek. Repeated seek requests retain only the newest target.

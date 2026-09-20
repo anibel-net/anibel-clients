@@ -75,7 +75,8 @@ public sealed class PlayerController(ICoreClient core) : IDisposable
             url,
             episodeId,
             downloadId,
-            episodeType
+            episodeType,
+            preferDash = true
         }, ct);
         if (ct.IsCancellationRequested || _disposed)
         {
