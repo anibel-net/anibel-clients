@@ -24,6 +24,8 @@ android {
     }
 
     buildFeatures { compose = true }
+    sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("playback-fixtures").get().asFile)
+    sourceSets.getByName("test").resources.srcDir(rootProject.file("../../crates/anibel-core/tests/fixtures"))
     sourceSets.getByName("main").jniLibs.directories.add(layout.buildDirectory.dir("rustJniLibs").get().asFile.path)
 }
 
@@ -34,8 +36,7 @@ val buildRust = tasks.register<Exec>("buildRust") {
     environment("ANDROID_NDK_HOME", androidComponents.sdkComponents.sdkDirectory.get().dir("ndk/${android.ndkVersion}").asFile)
     commandLine("cargo", "ndk", "-t", "x86_64", "-t", "arm64-v8a", "-o", libraries.get().asFile,
         "build", "-p", "anibel-core", "--release", "--locked")
-    inputs.files(fileTree(repository.resolve("core")) { exclude("target/**") },
-        fileTree(repository.resolve("crates")), repository.resolve("Cargo.toml"),
+    inputs.files(fileTree(repository.resolve("crates")), repository.resolve("Cargo.toml"),
         repository.resolve("Cargo.lock"), repository.resolve("rust-toolchain.toml"))
     outputs.dir(libraries)
 }
@@ -44,6 +45,7 @@ tasks.named("preBuild") { dependsOn(buildRust) }
 kotlin { jvmToolchain(17) }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("io.github.peerless2012:ass-media:0.5.1")
     implementation("io.github.peerless2012:ass-kt:0.5.1")
     implementation(libs.androidx.documentfile)

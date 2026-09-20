@@ -12,94 +12,99 @@ use anibel_domain::models::{
 use serde::Serialize;
 use serde_json::Value;
 
-pub fn json(v: impl Serialize) -> Value {
-    serde_json::to_value(v).unwrap_or(Value::Null)
-}
+use anibel_domain::error::{AnibelError, Result};
 
-pub fn media_card(v: impl Serialize) -> MediaCard {
-    media_card_from(&json(v))
+pub fn json(v: impl Serialize) -> Result<Value> {
+    serde_json::to_value(v).map_err(|e| AnibelError::Internal(format!("API mapping: {e}")))
 }
-
-pub fn media_cards_opt<T: Serialize>(items: impl IntoIterator<Item = Option<T>>) -> Vec<MediaCard> {
+fn validate_media(value: &Value) -> Result<()> {
+    for key in ["mediaId", "mediaType", "slug"] {
+        if value
+            .get(key)
+            .and_then(Value::as_str)
+            .is_none_or(|s| s.trim().is_empty())
+        {
+            return Err(AnibelError::Internal(format!("API media is missing {key}")));
+        }
+    }
+    Ok(())
+}
+pub fn media_card(v: impl Serialize) -> Result<MediaCard> {
+    let v = json(v)?;
+    validate_media(&v)?;
+    Ok(media_card_from(&v))
+}
+pub fn media_detail(v: impl Serialize) -> Result<MediaDetail> {
+    let v = json(v)?;
+    validate_media(&v)?;
+    Ok(media_detail_from(&v))
+}
+pub fn media_cards_opt<T: Serialize>(
+    items: impl IntoIterator<Item = Option<T>>,
+) -> Result<Vec<MediaCard>> {
     items.into_iter().flatten().map(media_card).collect()
 }
-
-pub fn media_detail(v: impl Serialize) -> MediaDetail {
-    media_detail_from(&json(v))
+pub fn media_detail_opt<T: Serialize>(v: Option<T>) -> Result<Option<MediaDetail>> {
+    v.map(media_detail).transpose()
 }
-
-pub fn media_detail_opt<T: Serialize>(v: Option<T>) -> Option<MediaDetail> {
-    v.map(media_detail)
+pub fn page_media(v: impl Serialize) -> Result<Page<MediaCard>> {
+    let v = json(v)?;
+    if let Some(docs) = v.get("docs").and_then(Value::as_array) {
+        for item in docs.iter().filter(|item| !item.is_null()) {
+            validate_media(item)?;
+        }
+    }
+    Ok(page_from(&v, media_card_from))
 }
-
-pub fn page_media(v: impl Serialize) -> Page<MediaCard> {
-    page_from(&json(v), media_card_from)
+pub fn page_episodes(v: impl Serialize) -> Result<Page<Episode>> {
+    Ok(page_from(&json(v)?, episode_from))
 }
-
-pub fn page_episodes(v: impl Serialize) -> Page<Episode> {
-    page_from(&json(v), episode_from)
+pub fn page_chapters(v: impl Serialize) -> Result<Page<Chapter>> {
+    Ok(page_from(&json(v)?, chapter_from))
 }
-
-pub fn page_chapters(v: impl Serialize) -> Page<Chapter> {
-    page_from(&json(v), chapter_from)
+pub fn page_comments(v: impl Serialize) -> Result<Page<Comment>> {
+    Ok(page_from(&json(v)?, comment_from))
 }
-
-pub fn page_comments(v: impl Serialize) -> Page<Comment> {
-    page_from(&json(v), comment_from)
+pub fn comment(v: impl Serialize) -> Result<Comment> {
+    Ok(comment_from(&json(v)?))
 }
-
-pub fn comment(v: impl Serialize) -> Comment {
-    comment_from(&json(v))
+pub fn page_marks(v: impl Serialize) -> Result<Page<MarkEntry>> {
+    Ok(page_from(&json(v)?, mark_entry_from))
 }
-
-pub fn page_marks(v: impl Serialize) -> Page<MarkEntry> {
-    page_from(&json(v), mark_entry_from)
+pub fn chapter(v: impl Serialize) -> Result<Chapter> {
+    Ok(chapter_from(&json(v)?))
 }
-
-pub fn chapter(v: impl Serialize) -> Chapter {
-    chapter_from(&json(v))
+pub fn slide(v: impl Serialize) -> Result<Slide> {
+    Ok(slide_from(&json(v)?))
 }
-
-pub fn slide(v: impl Serialize) -> Slide {
-    slide_from(&json(v))
+pub fn login_user(v: impl Serialize) -> Result<LoginUser> {
+    Ok(login_user_from(&json(v)?))
 }
-
-pub fn slides_opt<T: Serialize>(items: impl IntoIterator<Item = Option<T>>) -> Vec<Slide> {
+pub fn profile(v: impl Serialize) -> Result<Profile> {
+    Ok(profile_from(&json(v)?))
+}
+pub fn filters(v: impl Serialize) -> Result<Filters> {
+    Ok(filters_from(&json(v)?))
+}
+pub fn statistics(v: impl Serialize) -> Result<Statistics> {
+    Ok(statistics_from(&json(v)?))
+}
+pub fn status(v: impl Serialize) -> Result<StatusCounters> {
+    Ok(status_from(&json(v)?))
+}
+pub fn schedule_day(v: impl Serialize) -> Result<ScheduleDay> {
+    Ok(schedule_day_from(&json(v)?))
+}
+pub fn slides_opt<T: Serialize>(items: impl IntoIterator<Item = Option<T>>) -> Result<Vec<Slide>> {
     items.into_iter().flatten().map(slide).collect()
 }
-
-pub fn login_user(v: impl Serialize) -> LoginUser {
-    login_user_from(&json(v))
+pub fn profile_opt<T: Serialize>(v: Option<T>) -> Result<Option<Profile>> {
+    v.map(profile).transpose()
 }
-
-pub fn profile(v: impl Serialize) -> Profile {
-    profile_from(&json(v))
-}
-
-pub fn profile_opt<T: Serialize>(v: Option<T>) -> Option<Profile> {
-    v.map(profile)
-}
-
-pub fn filters(v: impl Serialize) -> Filters {
-    filters_from(&json(v))
-}
-
-pub fn statistics(v: impl Serialize) -> Statistics {
-    statistics_from(&json(v))
-}
-
-pub fn status(v: impl Serialize) -> StatusCounters {
-    status_from(&json(v))
-}
-
 pub fn schedule_days_opt<T: Serialize>(
     items: impl IntoIterator<Item = Option<T>>,
-) -> Vec<ScheduleDay> {
+) -> Result<Vec<ScheduleDay>> {
     items.into_iter().flatten().map(schedule_day).collect()
-}
-
-pub fn schedule_day(v: impl Serialize) -> ScheduleDay {
-    schedule_day_from(&json(v))
 }
 
 fn page_from<T>(v: &Value, map_item: fn(&Value) -> T) -> Page<T> {
@@ -437,138 +442,4 @@ fn as_plain_str(v: &Value) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn flattens_comment_date_created() {
-        let c = comment_from(&json!({
-            "id": "c1",
-            "content": "hi",
-            "user": { "username": "ann", "avatar": null, "displayName": "Ann" },
-            "date": { "created": 1700000000000u64, "updated": "1700000001000" }
-        }));
-        assert_eq!(c.id, "c1");
-        assert_eq!(c.created, 1_700_000_000_000);
-        assert_eq!(c.user.as_ref().unwrap().username, "ann");
-        let wire = serde_json::to_value(&c).unwrap();
-        assert!(wire.get("date").is_none());
-        assert_eq!(wire["created"], 1_700_000_000_000u64);
-    }
-
-    #[test]
-    fn parses_bignumber_string_on_episode() {
-        let ep = episode_from(&json!({
-            "id": "e1",
-            "episode": 13,
-            "url": "https://video.anibel.net/abc",
-            "type": "sub",
-            "resource": 2,
-            "released": "1700000000000"
-        }));
-        assert_eq!(ep.released, Some(1_700_000_000_000));
-    }
-
-    #[test]
-    fn maps_studies_to_studios() {
-        let f = filters_from(&json!({
-            "years": [2024, "2023"],
-            "genres": ["драма", null],
-            "studies": ["studio a"],
-            "translators": ["translator"],
-            "editors": ["editor"],
-            "dubbers": ["dubber"],
-            "programmers": ["programmer"],
-            "audioEngineers": ["engineer"],
-            "typpers": ["typper"],
-            "cleanners": ["cleanner"]
-        }));
-        assert_eq!(f.years, Some(vec![2024, 2023]));
-        assert_eq!(f.genres.as_ref().unwrap()[0], "драма");
-        assert_eq!(f.studios, Some(vec!["studio a".into()]));
-        let wire = serde_json::to_value(&f).unwrap();
-        assert!(wire.get("studies").is_none());
-        assert_eq!(wire["studios"][0], "studio a");
-        for (field, value) in [
-            ("translators", "translator"),
-            ("editors", "editor"),
-            ("dubbers", "dubber"),
-            ("programmers", "programmer"),
-            ("audioEngineers", "engineer"),
-            ("typpers", "typper"),
-            ("cleanners", "cleanner"),
-        ] {
-            assert_eq!(wire[field][0], value);
-        }
-    }
-
-    #[test]
-    fn media_card_ignores_graphql_extras() {
-        let card = media_card_from(&json!({
-            "mediaId": "1",
-            "mediaType": "anime",
-            "slug": "foo",
-            "title": { "be": "Т", "ru": "Р", "en": null },
-            "poster": "https://x",
-            "year": 2020,
-            "rating": 8.5,
-            "genres": ["a"],
-            "hidden": false,
-            "markStats": { "total": 1 }
-        }));
-        assert_eq!(card.slug, "foo");
-        assert_eq!(card.title.unwrap().be.as_deref(), Some("Т"));
-        let wire = serde_json::to_value(media_card_from(&json!({
-            "mediaId": "1", "mediaType": "anime", "slug": "foo"
-        })))
-        .unwrap();
-        assert!(wire.get("hidden").is_none());
-        assert!(wire.get("markStats").is_none());
-    }
-
-    #[test]
-    fn media_card_maps_status_language_and_update() {
-        let card = media_card_from(&json!({
-            "mediaId": "1",
-            "mediaType": "anime",
-            "slug": "foo",
-            "status": "ongoing",
-            "language": ["sub", "dub"],
-            "updateType": "DUB",
-            "num": 12,
-            "year": 2024
-        }));
-        assert_eq!(card.status.as_deref(), Some("ongoing"));
-        assert_eq!(
-            card.language.as_ref().unwrap(),
-            &vec!["sub".to_string(), "dub".to_string()]
-        );
-        assert_eq!(card.update_type.as_deref(), Some("DUB"));
-        assert_eq!(card.num, Some(12));
-        assert_eq!(card.year, Some(2024));
-    }
-
-    #[test]
-    fn media_detail_maps_franchise_relations_recommendations() {
-        let detail = media_detail_from(&json!({
-            "mediaId": "1",
-            "mediaType": "anime",
-            "slug": "death-note",
-            "franchise": "Death Note",
-            "relations": [
-                { "mediaId": "1", "mediaType": "anime", "slug": "death-note" },
-                { "mediaId": "2", "mediaType": "anime", "slug": "death-note-rewrite" }
-            ],
-            "recommendations": [
-                { "mediaId": "3", "mediaType": "anime", "slug": "monster" },
-                { "mediaId": "4", "mediaType": "anime", "slug": "hidden-rec", "hidden": true }
-            ]
-        }));
-        assert_eq!(detail.franchise.as_deref(), Some("Death Note"));
-        assert_eq!(detail.relations.len(), 2);
-        assert_eq!(detail.relations[1].slug, "death-note-rewrite");
-        assert_eq!(detail.recommendations.len(), 1);
-        assert_eq!(detail.recommendations[0].slug, "monster");
-    }
-}
+mod tests;

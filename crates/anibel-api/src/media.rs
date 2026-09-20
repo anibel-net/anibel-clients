@@ -81,9 +81,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::episodes_query::ResponseData>()?;
-        Ok(crate::map::page_episodes(data.episodes.ok_or_else(
-            || AnibelError::Graphql("episodes: null".into()),
-        )?))
+        crate::map::page_episodes(
+            data.episodes
+                .ok_or_else(|| AnibelError::Graphql("episodes: null".into()))?,
+        )
     }
 
     /// Fetch all four sub/dub × resource 1/2 combos and merge (site parity).
@@ -137,9 +138,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::chapters_query::ResponseData>()?;
-        Ok(crate::map::page_chapters(data.chapters.ok_or_else(
-            || AnibelError::Graphql("chapters: null".into()),
-        )?))
+        crate::map::page_chapters(
+            data.chapters
+                .ok_or_else(|| AnibelError::Graphql("chapters: null".into()))?,
+        )
     }
 
     pub async fn chapter(&self, slug: &str, chapter: f64) -> Result<Chapter> {
@@ -154,9 +156,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::chapter_query::ResponseData>()?;
-        Ok(crate::map::chapter(data.chapter.ok_or_else(|| {
-            AnibelError::NotFound(format!("chapter {chapter} of `{slug}`"))
-        })?))
+        crate::map::chapter(
+            data.chapter
+                .ok_or_else(|| AnibelError::NotFound(format!("chapter {chapter} of `{slug}`")))?,
+        )
     }
 
     pub async fn comments(
@@ -179,9 +182,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::comments_query::ResponseData>()?;
-        Ok(crate::map::page_comments(data.comments.ok_or_else(
-            || AnibelError::Graphql("comments: null".into()),
-        )?))
+        crate::map::page_comments(
+            data.comments
+                .ok_or_else(|| AnibelError::Graphql("comments: null".into()))?,
+        )
     }
 
     pub async fn set_rating(&self, media_id: &str, media_type: &str, rating: f64) -> Result<()> {
@@ -237,9 +241,10 @@ impl AnibelApi {
             .request_no_retry::<Value>(body)
             .await?
             .deserialize::<gql::add_comment_mutation::ResponseData>()?;
-        Ok(crate::map::comment(data.add_comment.ok_or_else(|| {
-            AnibelError::Graphql("addComment: null".into())
-        })?))
+        crate::map::comment(
+            data.add_comment
+                .ok_or_else(|| AnibelError::Graphql("addComment: null".into()))?,
+        )
     }
 }
 

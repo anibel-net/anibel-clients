@@ -42,7 +42,7 @@ C ABI: handles, request cancellation, JSON, panic containment, buffer ownership
 ```
 
 The binding uses `Application`, not API adapters directly. Keep the application
-modules in `core/src/application`; do not add a crate or general repository
+modules in `crates/anibel-core/src/application`; do not add a crate or general repository
 interface without a concrete dependency need. Download status, download kind,
 playback kind, playback events, and personal-list kind are closed Rust enums.
 
@@ -71,6 +71,9 @@ Invalid durable data causes init to fail with handle `-1`.
 At startup, call `capabilities` and require `protocolVersion: 2`. Its feature list
 includes downloads, playback, reader, session, cancellation and searchHistory.
 The Windows app restores protected credentials before starting state polling.
+Capabilities also include supported `downloadFormats`. Android starts downloads
+suspended; its foreground service grants execution time, then drains workers on
+stop. The desktop queue starts automatically. MKV downloads are not exposed on Android.
 
 ```json
 {"id":17,"op":"media","args":{"slug":"example","mediaType":"anime"},"cache":"reload"}
@@ -107,6 +110,11 @@ Fields use camelCase. The source files contain the full DTO definitions.
 
 | Command | Arguments | Result |
 |---|---|---|
+| `downloadsSuspend` | none | Drain workers and preserve queued jobs |
+| `downloadsResume` | none | Grant execution time and start queued jobs |
+| `continueEpisode` | mediaId, optional legacy selection | Last selected available episode, then first unwatched, then first episode |
+| `rememberEpisode` | mediaId, episodeId, episodeType | Save the confirmed playback selection |
+| `continueChapter` | mediaId, slug, optional legacyChapter | Saved available chapter or first chapter, plus chapter numbers |
 | `session` | none | `{revision,authenticated,username,userId,avatar}`; no token |
 | `login` | username, password | Login profile and token for protected host storage |
 | `setToken` | token, username, id, avatar | Restores active session; null token clears it |
@@ -237,18 +245,16 @@ job; 4 MiB HLS playlists; 256 MiB per segment; 64 MiB per manga image; 128 subti
 files and 256 fonts per source. Durable JSON files are limited to 64 MiB. Individual
 files and JSON snapshots use temporary files, sync, and atomic replacement.
 Corrupt durable data is an error, not an empty library. Job restart repeats source
-resolution and transfers. There is no old-format import.
+resolution and transfers. The Android adapter imports its former last-title selection once; other storage formats stay unchanged.
 
 ## Playback and reader rules
 
 The native engine reports video track IDs, dimensions, bitrate, codec, image and
 selection flags. Rust excludes image tracks, checks bounds and duplicate IDs,
-sorts available qualities, and validates the requested ID. Windows changes mpv's
-video track in the existing session. It does not reload the title or reset resume,
-audio, subtitles, or pause. Both the main player and PiP use the same menu.
-The bundled mpv uses [flatten-editions](https://mpv.io/manual/master/#options-flatten-editions)
-to expose HLS renditions as tracks. A live test on the bundled DLL verified
-1080p → 360p → 720p at 60 seconds while paused, with the selected audio retained.
+sorts available qualities, and validates the requested ID. Windows uses native
+MediaPlayer first, with FFmpegInteropX software decoding for unsupported video.
+Quality replacement preserves position, pause, audio and subtitles. One engine
+and the same controls serve the main player and PiP. Android uses Media3 and libass.
 
 Core playback selects a valid local episode before resolving an online source.
 An explicit download ID must identify a complete playable download. Rust prepares
@@ -303,18 +309,8 @@ engine event ordering, late seek rejection, and view behavior.
 
 Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace`, a release core build, then Windows tests and build.
-Mock-server and DLL contract checks do not replace an interactive mpv/WebView2
-playback check or validation on future Apple/Android devices.
-
-Validation on 2026-09-13: 84 Rust tests passed. Rust formatting and Clippy checks
-passed. The release DLL passed local-server checks for HLS export, offline
-playback/resume, reader pages, cancellation, and restart. A headless mpv check
-confirmed that switching between live 1080p, 360p, and 720p tracks keeps playback
-position, pause state, and selected audio. The ten optional live API tests were
-not run in the final review.
-
-All 98 Windows tests passed. They cover independent player close, close during source loading,
-PiP size bounds, keyboard focus rules, reader layout bounds, comments, ratings,
-and stale profile or personal-data responses. The Debug build passes with
-existing MVVM AOT warnings. Full visual checks of multiple media windows and
-reader controls are still required.
+Mock-server and DLL contract checks do not replace native rendering and lifecycle
+tests. The Windows local fixture suite checks decoded frames, subtitles, seek,
+quality and PiP. Android local device tests check JNI lifetime, execution permission,
+rendered video, audio-track presence, seek and close. Required CI checks use local
+fixtures; optional live checks are separate.

@@ -33,7 +33,7 @@ impl AnibelApi {
             return Err(AnibelError::Graphql("login returned an empty token".into()));
         }
         self.set_token(Some(user.token.clone())).await;
-        Ok(crate::map::login_user(user))
+        crate::map::login_user(user)
     }
 
     pub async fn logout(&self) {

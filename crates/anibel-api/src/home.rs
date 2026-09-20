@@ -35,7 +35,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::trends_query::ResponseData>()?;
-        Ok(crate::map::media_cards_opt(data.get_trends))
+        crate::map::media_cards_opt(data.get_trends)
     }
 
     pub async fn updates(&self, r#type: &str, offset: i64, limit: i64) -> Result<Vec<MediaCard>> {
@@ -59,7 +59,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::updates_query::ResponseData>()?;
-        Ok(crate::map::media_cards_opt(data.get_updates_list.docs))
+        crate::map::media_cards_opt(data.get_updates_list.docs)
     }
 
     pub async fn recommendations(&self, r#type: &str, limit: i64) -> Result<Vec<MediaCard>> {
@@ -74,7 +74,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::recommendations_query::ResponseData>()?;
-        Ok(crate::map::media_cards_opt(data.get_recommendations))
+        crate::map::media_cards_opt(data.get_recommendations)
     }
 
     pub async fn schedule(&self) -> Result<Vec<ScheduleDay>> {
@@ -86,7 +86,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::schedule_query::ResponseData>()?;
-        Ok(crate::map::schedule_days_opt(data.get_schedule))
+        crate::map::schedule_days_opt(data.get_schedule)
     }
 
     pub async fn slider(&self, limit: i64) -> Result<Vec<Slide>> {
@@ -98,7 +98,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::slider_query::ResponseData>()?;
-        Ok(crate::map::slides_opt(data.get_slider))
+        crate::map::slides_opt(data.get_slider)
     }
 
     pub async fn filters(&self, media_type: Option<String>) -> Result<Filters> {
@@ -111,9 +111,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::filters_query::ResponseData>()?;
-        Ok(crate::map::filters(data.get_filters.ok_or_else(|| {
-            AnibelError::Graphql("getFilters: null".into())
-        })?))
+        crate::map::filters(
+            data.get_filters
+                .ok_or_else(|| AnibelError::Graphql("getFilters: null".into()))?,
+        )
     }
 
     pub async fn statistics(&self) -> Result<Statistics> {
@@ -125,9 +126,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::statistics_query::ResponseData>()?;
-        Ok(crate::map::statistics(data.get_statistics.ok_or_else(
-            || AnibelError::Graphql("getStatistics: null".into()),
-        )?))
+        crate::map::statistics(
+            data.get_statistics
+                .ok_or_else(|| AnibelError::Graphql("getStatistics: null".into()))?,
+        )
     }
 
     pub async fn random_media(&self) -> Result<MediaDetail> {
@@ -139,9 +141,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::random_media_query::ResponseData>()?;
-        Ok(crate::map::media_detail(data.random_media.ok_or_else(
-            || AnibelError::NotFound("random media".into()),
-        )?))
+        crate::map::media_detail(
+            data.random_media
+                .ok_or_else(|| AnibelError::NotFound("random media".into()))?,
+        )
     }
 }
 

@@ -19,7 +19,7 @@ AppPackages/
 # Loaders
 loader-assets/
 
-# mpv runtime binary (fetched via scripts/fetch-mpv.ps1)
+# Native runtime binaries (not source)
 apps/windows/src/Assets/libmpv/
 apps/windows/src/Assets/ffmpeg/
 apps/windows/src/Assets/libass/

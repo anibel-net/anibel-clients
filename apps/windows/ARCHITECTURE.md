@@ -31,3 +31,17 @@ DLLs. The engine owns the bridge and temporary single-quality manifests until
 playback closes. libass continues to own text subtitle rendering. The build targets
 the Windows 11 SDK for the bridge projection; TargetPlatformMinVersion remains
 Windows 10 (17763). Windows 10 device validation is still required.
+
+## Feature structure
+
+`Shell` owns windows, routing and toolbar search. `Features` groups related views,
+view models and command adapters. `Core` owns the typed command boundary;
+`Platform` owns OS and storage adapters; `UI` contains shared native presentation.
+Namespaces remain stable while source folders express ownership.
+
+ToolbarSearch owns suggestions, their cancellation and explicit focus requests.
+MediaDownloadActions builds title download requests without owning XAML status controls.
+SoftwareVideoSource owns the decoder and its temporary manifest. SubtitlePresentation
+owns subtitle assets and rendering. The media engine remains the single timeline owner.
+CoreStatePump uses snapshots as state and events as diagnostic notifications. It polls
+active jobs more frequently than an idle library.

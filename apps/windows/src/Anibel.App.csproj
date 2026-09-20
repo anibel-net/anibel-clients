@@ -18,8 +18,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
-    <!-- Dev defaults: unpackaged + self-contained runtime. For MSIX packaging
-         (release) switch WindowsPackageType back and use win-x64.pubxml. -->
+    <!-- Unpackaged and self-contained. Release installers use Velopack. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <OptimizeDistribution Condition="'$(OptimizeDistribution)' == ''">true</OptimizeDistribution>

@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     tags: ["windows-v*"]
-    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", "tools/UpdateSmoke/**", ".config/dotnet-tools.json", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "crates/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "scripts/**", "tools/PlaybackSmoke/**", "tools/UpdateSmoke/**", ".config/dotnet-tools.json", ".github/workflows/windows.yml"]
   pull_request:
-    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", "tools/UpdateSmoke/**", ".config/dotnet-tools.json", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "crates/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "scripts/**", "tools/PlaybackSmoke/**", "tools/UpdateSmoke/**", ".config/dotnet-tools.json", ".github/workflows/windows.yml"]
 
 permissions:
   contents: read

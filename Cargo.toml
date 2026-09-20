@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "core",
+    "crates/anibel-core",
     "crates/anibel-domain",
     "crates/anibel-api",
     "crates/anibel-player",

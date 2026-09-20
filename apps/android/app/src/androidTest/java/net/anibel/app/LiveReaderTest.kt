@@ -24,9 +24,9 @@ class LiveReaderTest {
 
     @Test fun liveChapterDisplaysDecodedPage(): Unit = runBlocking {
         val core = (compose.activity.application as AnibelApplication).core
-        val titles = core.call("mediaList", json("mediaType" to "manga", "limit" to 10)).getJSONArray("docs").objects()
-        val title = titles.first { core.call("chapters", json("mediaId" to it.getString("mediaId"), "limit" to 1000)).getJSONArray("docs").length() > 0 }
-        val chapters = core.call("chapters", json("mediaId" to title.getString("mediaId"), "limit" to 1000)).getJSONArray("docs").objects()
+        val titles = core.call(CoreCommand.MediaList, json("mediaType" to "manga", "limit" to 10)).getJSONArray("docs").objects()
+        val title = titles.first { core.call(CoreCommand.Chapters, json("mediaId" to it.getString("mediaId"), "limit" to 1000)).getJSONArray("docs").length() > 0 }
+        val chapters = core.call(CoreCommand.Chapters, json("mediaId" to title.getString("mediaId"), "limit" to 1000)).getJSONArray("docs").objects()
         val args = json("slug" to title.getString("slug"), "chapter" to chapters.first().getDouble("chapter"),
             "chapters" to org.json.JSONArray(chapters.map { it.getDouble("chapter") }))
         println("Reader title: ${title.getString("slug")}")

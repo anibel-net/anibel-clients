@@ -20,7 +20,7 @@ impl AnibelApi {
             .request_no_retry::<Value>(body)
             .await?
             .deserialize::<gql::update_profile_mutation::ResponseData>()?;
-        crate::map::profile_opt(data.update_user)
+        crate::map::profile_opt(data.update_user)?
             .ok_or_else(|| AnibelError::Graphql("updateUser: null".into()))
     }
 
@@ -95,7 +95,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::user_query::ResponseData>()?;
-        Ok(crate::map::profile_opt(data.user))
+        crate::map::profile_opt(data.user)
     }
 
     pub async fn favorites(
@@ -119,9 +119,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::favorites_query::ResponseData>()?;
-        Ok(crate::map::page_media(data.favorites.ok_or_else(|| {
-            AnibelError::Graphql("favorites: null".into())
-        })?))
+        crate::map::page_media(
+            data.favorites
+                .ok_or_else(|| AnibelError::Graphql("favorites: null".into()))?,
+        )
     }
 
     pub async fn marks(
@@ -145,9 +146,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::marks_query::ResponseData>()?;
-        Ok(crate::map::page_marks(data.marks.ok_or_else(|| {
-            AnibelError::Graphql("marks: null".into())
-        })?))
+        crate::map::page_marks(
+            data.marks
+                .ok_or_else(|| AnibelError::Graphql("marks: null".into()))?,
+        )
     }
 
     pub async fn status(&self, username: &str, media_type: &str) -> Result<StatusCounters> {
@@ -162,6 +164,6 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::status_query::ResponseData>()?;
-        Ok(crate::map::status(data.status))
+        crate::map::status(data.status)
     }
 }

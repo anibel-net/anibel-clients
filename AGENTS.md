@@ -4,7 +4,7 @@
 
 These rules apply to the whole repository. Read the nearest project AGENTS.md before editing. The root README is Belarusian only; code identifiers and technical guidance may use English.
 
-- `core`: shared application policy, state, storage, C ABI and Android JNI.
+- `crates/anibel-core`: shared application policy, state, storage, C ABI and Android JNI.
 - `crates/anibel-domain`: shared data models and errors.
 - `crates/anibel-api`: GraphQL requests and response mapping.
 - `crates/anibel-player`: video service and source resolution.

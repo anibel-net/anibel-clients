@@ -1,5 +1,5 @@
-//! Frozen host-facing domain DTOs. These are the only JSON shapes that
-//! cross the FFI boundary. GraphQL generated types stay crate-private.
+//! Shared domain DTOs. Application command envelopes and results live in
+//! anibel-core. GraphQL generated types stay crate-private.
 
 use serde::{Deserialize, Serialize};
 

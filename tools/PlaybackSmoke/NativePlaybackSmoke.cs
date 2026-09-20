@@ -543,9 +543,9 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         account.Focus(FocusState.Programmatic);
         search.Focus(FocusState.Programmatic);
         Check(!Anibel.App.Services.KeyboardNavigation.FocusIsWithin(search), "Search accepted fallback focus from a loaded control");
-        typeof(Anibel.App.MainWindow).GetField("_focusSearchRequested", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(shell, true);
-        try { Check(search.Focus(FocusState.Pointer), "Explicit search focus failed"); }
-        finally { typeof(Anibel.App.MainWindow).GetField("_focusSearchRequested", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(shell, false); }
+        var searchOwner = (Anibel.App.ToolbarSearch)typeof(Anibel.App.MainWindow)
+            .GetField("_toolbarSearch", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(shell)!;
+        searchOwner.Focus();
         Check(Anibel.App.Services.KeyboardNavigation.FocusIsWithin(search), "Explicit search did not get focus");
         account.Focus(FocusState.Programmatic);
         account.Visibility = Visibility.Collapsed;

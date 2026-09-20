@@ -25,19 +25,19 @@ class CoreIntegrationTest {
 
     @Test fun liveHomeAndTitlePages() = runBlocking {
         val core = ApplicationProvider.getApplicationContext<AnibelApplication>().core
-        assertTrue((core.value("slider", json("limit" to 3)) as org.json.JSONArray).length() > 0)
-        assertTrue(core.call("updatesPage", json("type" to "ALL", "offset" to 0, "limit" to 3)).getJSONArray("docs").length() > 0)
-        assertNotNull(core.call("downloads").getJSONArray("items"))
+        assertTrue((core.value(CoreCommand.Slider, json("limit" to 3)) as org.json.JSONArray).length() > 0)
+        assertTrue(core.call(CoreCommand.UpdatesPage, json("type" to "ALL", "offset" to 0, "limit" to 3)).getJSONArray("docs").length() > 0)
+        assertNotNull(core.call(CoreCommand.Downloads).getJSONArray("items"))
         for (catalog in AppPage.catalogs) {
-            val card = core.call("mediaList", json("mediaType" to catalog.mediaType, "offset" to 0, "limit" to 1)).getJSONArray("docs").getJSONObject(0)
-            val detail = core.call("media", json("slug" to card.getString("slug"), "mediaType" to catalog.mediaType))
+            val card = core.call(CoreCommand.MediaList, json("mediaType" to catalog.mediaType, "offset" to 0, "limit" to 1)).getJSONArray("docs").getJSONObject(0)
+            val detail = core.call(CoreCommand.Media, json("slug" to card.getString("slug"), "mediaType" to catalog.mediaType))
             assertEquals(card.getString("mediaId"), detail.getString("mediaId"))
-            val kind = core.call("mediaKind", json("mediaType" to catalog.mediaType))
+            val kind = core.call(CoreCommand.MediaKind, json("mediaType" to catalog.mediaType))
             when (kind.getString("content")) {
-                "episodes" -> assertNotNull(core.call("episodeChoices", json("mediaId" to detail.getString("mediaId"), "kind" to "dub")).getJSONArray("items"))
-                "chapters" -> assertNotNull(core.call("chapters", json("mediaId" to detail.getString("mediaId"), "limit" to 1000)).getJSONArray("docs"))
+                "episodes" -> assertNotNull(core.call(CoreCommand.EpisodeChoices, json("mediaId" to detail.getString("mediaId"), "kind" to "dub")).getJSONArray("items"))
+                "chapters" -> assertNotNull(core.call(CoreCommand.Chapters, json("mediaId" to detail.getString("mediaId"), "limit" to 1000)).getJSONArray("docs"))
             }
-            assertNotNull(core.call("comments", json("mediaId" to detail.getString("mediaId"), "mediaType" to catalog.mediaType, "offset" to 0, "limit" to 20)).getJSONArray("docs"))
+            assertNotNull(core.call(CoreCommand.Comments, json("mediaId" to detail.getString("mediaId"), "mediaType" to catalog.mediaType, "offset" to 0, "limit" to 20)).getJSONArray("docs"))
         }
     }
 
@@ -65,19 +65,19 @@ class CoreIntegrationTest {
         val core = ApplicationProvider.getApplicationContext<AnibelApplication>().core
         for (catalog in AppPage.catalogs) {
             val args = JSONObject().put("mediaType", catalog.mediaType).put("limit", 2).put("offset", 0)
-            val first = core.call("mediaList", args, reload = true)
+            val first = core.call(CoreCommand.MediaList, args, reload = true)
             assertTrue("${catalog.name} has titles", first.getJSONArray("docs").length() > 0)
             val title = first.getJSONArray("docs").getJSONObject(0)
             assertNotNull(title.getJSONObject("title").text("be") ?: title.getJSONObject("title").text("ru"))
-            val filters = core.call("filters", JSONObject().put("mediaType", catalog.mediaType), reload = true)
+            val filters = core.call(CoreCommand.Filters, JSONObject().put("mediaType", catalog.mediaType), reload = true)
             assertTrue("${catalog.name} has filter options", filters.length() > 0)
             if (first.getBoolean("hasMore")) {
-                val second = core.call("mediaList", args.put("offset", first.getLong("nextOffset")))
+                val second = core.call(CoreCommand.MediaList, args.put("offset", first.getLong("nextOffset")))
                 assertNotEquals(title.getString("mediaId"), second.getJSONArray("docs").getJSONObject(0).getString("mediaId"))
             }
             val year = filters.optJSONArray("years")?.optLong(0) ?: 0
             if (year > 0) {
-                val filtered = core.call("mediaList", args.put("offset", 0)
+                val filtered = core.call(CoreCommand.MediaList, args.put("offset", 0)
                     .put("filters", JSONObject().put("year", org.json.JSONArray().put(year))), reload = true)
                 val docs = filtered.getJSONArray("docs")
                 for (index in 0 until docs.length()) assertEquals(year, docs.getJSONObject(index).getLong("year"))

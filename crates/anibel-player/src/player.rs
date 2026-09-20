@@ -13,7 +13,7 @@
 //!    (HLS master `host+hls`, DASH `host+stream`, `.ass` subtitle tracks
 //!     + required font family names)
 //! 3. `POST /fonts-by-names` (public) → direct `.ttf` URLs for libass
-//! 4. assemble [`PlaybackIntent`] — the mpv engine consumes it directly.
+//! 4. assemble [`PlaybackIntent`] — native engines consume it.
 //!
 //! Google Drive urls (`resource: 1`) classify as `embed` (WebView2 pipeline).
 
@@ -67,7 +67,7 @@ pub enum PlaybackKind {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackIntent {
     /// `embed` — external iframe (Google Drive) — WebView2 pipeline
-    /// `native` — Anibel-hosted HLS/DASH + ASS subtitles — mpv/libass pipeline
+    /// `native` — Anibel-hosted HLS/DASH + ASS subtitles — native playback/libass pipeline
     pub kind: PlaybackKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub page_url: Option<String>,

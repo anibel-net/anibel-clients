@@ -22,7 +22,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::search_query::ResponseData>()?;
-        Ok(crate::map::media_cards_opt(data.search))
+        crate::map::media_cards_opt(data.search)
     }
 
     pub async fn media(
@@ -56,7 +56,7 @@ impl AnibelApi {
                 ))
                 .await?
                 .deserialize::<gql::media_query::ResponseData>()?;
-            return Ok(crate::map::media_detail_opt(data.media));
+            return crate::map::media_detail_opt(data.media);
         }
         let media_type = opt_enum::<gql::media_safe_query::MediaTypes>(media_type.as_deref())?;
         let data = self
@@ -70,7 +70,7 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::media_safe_query::ResponseData>()?;
-        Ok(crate::map::media_detail_opt(data.media))
+        crate::map::media_detail_opt(data.media)
     }
 
     pub async fn media_list(
@@ -157,9 +157,10 @@ impl AnibelApi {
                 ))
                 .await?
                 .deserialize::<gql::media_list_query::ResponseData>()?;
-            return Ok(crate::map::page_media(data.get_media_list.ok_or_else(
-                || AnibelError::Graphql("getMediaList: null".into()),
-            )?));
+            return crate::map::page_media(
+                data.get_media_list
+                    .ok_or_else(|| AnibelError::Graphql("getMediaList: null".into()))?,
+            );
         }
 
         let safe_filters = filters.and_then(|f| {
@@ -180,9 +181,10 @@ impl AnibelApi {
             ))
             .await?
             .deserialize::<gql::media_list_safe_query::ResponseData>()?;
-        Ok(crate::map::page_media(data.get_media_list.ok_or_else(
-            || AnibelError::Graphql("getMediaList: null".into()),
-        )?))
+        crate::map::page_media(
+            data.get_media_list
+                .ok_or_else(|| AnibelError::Graphql("getMediaList: null".into()))?,
+        )
     }
 }
 

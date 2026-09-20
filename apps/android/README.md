@@ -126,3 +126,12 @@ visibility and timeout. The PlayerView video/subtitle surface and libass path
 remain in use. TV retains its existing controller layout.
 
 Phone playback supports fit/fill by button or two-finger pinch, and Android picture-in-picture through the player button or Home while playing. PiP uses system media controls and restores the full player on return. Episode artwork reserves its aspect ratio while loading. Screenshot URLs share a bounded process cache; Coil keeps images in a 64 MiB memory cache and a 256 MiB disk cache. The phone launcher uses an adaptive icon.
+
+## Ownership and local playback checks
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for lifecycle owners. `LocalCoreLifecycleTest`
+and `LocalPlaybackTest` use isolated storage and generated media, with no website
+requests from the test core. Before the playback test, generate an eight-second
+H.264/AAC MP4 named `app/build/playback-fixtures/video.mp4`. The Android workflow
+contains the exact FFmpeg command. Build the test APK after generating this asset.
+No fixture media is included in normal app builds.
