@@ -424,7 +424,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             finally
             {
                 _changingSource = false;
-                if (!_disposed) { StartPendingSeek(); NotifyBuffering(); }
+                if (!_disposed) { StartPendingSeek(retainClock: true); NotifyBuffering(); }
                 _qualitySwitch.Release();
             }
             return;
@@ -462,14 +462,14 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             SetAudioTrack(audio);
             SetSubTrack(subtitle);
             _changingSource = false;
-            StartPendingSeek();
+            StartPendingSeek(retainClock: true);
         }
         finally
         {
             _changingSource = false;
             if (!_disposed)
             {
-                StartPendingSeek();
+                StartPendingSeek(retainClock: true);
                 NotifyBuffering();
             }
             _qualitySwitch.Release();
@@ -514,12 +514,23 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         PositionChanged?.Invoke(Position, Duration);
         NotifyBuffering();
         // Let the control paint first. While seeking, keep only the newest drag position.
-        OnUi(StartPendingSeek);
+        OnUi(() => StartPendingSeek());
     }
 
-    private void StartPendingSeek()
+    private void StartPendingSeek(bool retainClock = false)
     {
         if (_changingSource || _activeSeekTarget.HasValue || _seekTarget is not { } target) return;
+        // Quality replacement already opens at the shared clock. Do not create a
+        // second seek when the requested position is unchanged: paused Windows
+        // playback can omit SeekCompleted for that no-op and leave us waiting.
+        // Decoder recovery must still replace the failed source's clock.
+        if (retainClock && Math.Abs(target - ActualPosition) < .05)
+        {
+            _seekTarget = null;
+            PositionChanged?.Invoke(Position, Duration);
+            NotifyBuffering();
+            return;
+        }
         // A fresh clock preserves the latest target even when a paused HLS player
         // has not acknowledged its previous seek. Both players share this clock.
         // MediaStreamSource acknowledges exact seeks. Windows adaptive sources may

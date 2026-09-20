@@ -76,5 +76,8 @@ For example, use `-p:IntermediateOutputPath=obj/optimized-smoke/` with
 High 10 H.264 fixtures check automatic software fallback for MP4, HLS, DASH,
 and separate audio. Ordinary H.264 stays on Windows decoders. Software quality
 checks use fresh single-quality manifests and keep audio, subtitles and seek state.
+The unchanged-position quality case suppresses the engine's video `SeekCompleted`
+callback to check that a paused source replacement cannot wait forever on a no-op.
+The other quality case still changes the seek target while the source is loading.
 The shell check also verifies bottom-right update notices and the restart button
 with a fake updater (including a launch failure); it does not apply an installed update.

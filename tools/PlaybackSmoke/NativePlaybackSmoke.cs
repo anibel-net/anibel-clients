@@ -202,7 +202,12 @@ internal sealed partial class NativePlaybackSmoke(Application application, strin
                     .GetField("_audio", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(engine);
                 if (separateAudio is not null)
                     separateAudio.PlaybackSession.SeekCompleted += (_, _) => Interlocked.Increment(ref audioSeekAcknowledgements);
-                await WaitUntilAsync(() => failure is not null || (engine.Position > 0.2 && engine.Duration > 3), "Playback clock/duration failed");
+                try { await WaitUntilAsync(() => failure is not null || (engine.Position > 0.2 && engine.Duration > 3), "Playback clock/duration failed"); }
+                catch
+                {
+                    _results.Add($"OPEN FAILED software={engine.IsSoftwareDecoding} position={engine.Position} duration={engine.Duration} paused={engine.IsPaused} seeking={engine.IsSeeking} buffering={engine.IsBuffering} video={video.MediaPlayer.PlaybackSession.PlaybackState} audio={separateAudio?.PlaybackSession.PlaybackState} error={failure}");
+                    throw;
+                }
                 try { await WaitUntilAsync(() =>
                 {
                     if (failure is not null) return true;
@@ -298,15 +303,32 @@ internal sealed partial class NativePlaybackSmoke(Application application, strin
                     {
                         var positionBefore = engine.Position;
                         var started = System.Diagnostics.Stopwatch.StartNew();
+                        Windows.Foundation.TypedEventHandler<Windows.Media.Playback.MediaPlaybackSession, object>? completionHandler = null;
+                        if (engine.IsSoftwareDecoding && target.Id != highest.Id)
+                        {
+                            // A fresh paused source is already at the shared clock.
+                            // Simulate Windows omitting completion for a redundant seek.
+                            completionHandler = (Windows.Foundation.TypedEventHandler<Windows.Media.Playback.MediaPlaybackSession, object>)
+                                typeof(WindowsMediaEngine).GetMethod("OnSeekCompleted", BindingFlags.Instance | BindingFlags.NonPublic)!
+                                .CreateDelegate(typeof(Windows.Foundation.TypedEventHandler<Windows.Media.Playback.MediaPlaybackSession, object>), engine);
+                            video.MediaPlayer.PlaybackSession.SeekCompleted -= completionHandler;
+                        }
                         var change = engine.SetVideoTrackAsync(target.Id);
                         await WaitUntilAsync(() => change.IsCompleted || engine.IsChangingSource, "Quality switch did not start");
-                        if (!change.IsCompleted)
+                        if (!change.IsCompleted && target.Id == highest.Id)
                         {
                             positionBefore = Math.Min(engine.Duration - 0.5, positionBefore + 1);
                             engine.Seek(positionBefore);
                         }
-                        await change;
-                        await WaitUntilAsync(() => !engine.IsSeeking, "Quality/seek operation did not finish");
+                        try
+                        {
+                            await change;
+                            await WaitUntilAsync(() => !engine.IsSeeking, "Quality/seek operation did not finish");
+                        }
+                        finally
+                        {
+                            if (completionHandler is not null) video.MediaPlayer.PlaybackSession.SeekCompleted += completionHandler;
+                        }
                         Check(engine.IsPaused && engine.AudioTrack == audioBefore && engine.SubTrack == subBefore, "Quality switch changed pause/audio/subtitles");
                         Check(Math.Abs(engine.Position - positionBefore) < 0.5, $"Quality switch lost playback position: expected {positionBefore}, actual {engine.Position}, duration {engine.Duration}");
                         // HLS can display a separate I-frame rendition while paused. Check normal decoded frames after resume.

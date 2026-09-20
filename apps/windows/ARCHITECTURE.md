@@ -52,6 +52,9 @@ SoftwareVideoSource captures stream metadata before playback starts; the UI must
 not call decoder getters that take the read/seek lock. Software seeks use exact
 timestamps and keep the loader active until native video and separate audio
 acknowledge the seek. Repeated seek requests retain only the newest target.
+Quality replacement keeps the shared clock and skips a redundant seek when its
+new source is already at the requested position. Paused playback need not emit a
+seek-completion event for an unchanged position.
 
 Remote software-decoded sources read compressed packets ahead, bounded to 30 seconds
 and 32 MiB per stream. This separates network segment reads from sample delivery.
