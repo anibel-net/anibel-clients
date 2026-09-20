@@ -26,11 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare test audio device
+        working-directory: .
+        run: scripts/prepare-ci-audio.ps1
+
       - uses: dtolnay/rust-toolchain@1.95.0
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "."
+          cache-on-failure: true
 
       - uses: actions/setup-dotnet@v4
         with:
