@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare test audio device
+        timeout-minutes: 5
         working-directory: .
         run: scripts/prepare-ci-audio.ps1
 
