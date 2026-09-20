@@ -62,7 +62,7 @@ internal sealed class RestartTestSource : Anibel.App.Services.IReleaseUpdateSour
     }
 }
 
-internal sealed class NativePlaybackSmoke(Application application, string directory)
+internal sealed partial class NativePlaybackSmoke(Application application, string directory)
 {
     private Window? _window;
     private readonly List<string> _results = [];
@@ -218,6 +218,8 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 if (source.Contains("high10", StringComparison.OrdinalIgnoreCase))
                     Check(engine.IsSoftwareDecoding, "10-bit H.264 did not use the software decoder");
                 _results.Add(engine.IsSoftwareDecoding ? "DECODER software" : "DECODER Windows");
+                if (File.Exists(Path.Combine(directory, "continuity-seconds.txt")))
+                    await CheckContinuityAsync(engine, video.MediaPlayer, separateAudio);
                 if (source.EndsWith("separate-audio", StringComparison.Ordinal))
                 {
                     var audioPlayer = (Windows.Media.Playback.MediaPlayer)typeof(WindowsMediaEngine)

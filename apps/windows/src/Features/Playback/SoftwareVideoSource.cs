@@ -19,6 +19,11 @@ internal sealed class SoftwareVideoSource(FFmpegMediaSource decoder, string? man
         config.Video.VideoDecoderMode = VideoDecoderMode.ForceFFmpegSoftwareDecoder;
         config.General.FastSeek = false;
         config.General.FastSeekSmartStreamSwitching = false;
+        // Fetch compressed packets before the renderer needs them. Without this,
+        // each remote segment is read on demand and can stall video at its boundary.
+        config.General.ReadAheadBufferEnabled = manifestData is not null || !System.IO.File.Exists(path);
+        config.General.ReadAheadBufferDuration = TimeSpan.FromSeconds(30);
+        config.General.ReadAheadBufferSize = 32L * 1024 * 1024;
         config.Subtitles.UseEmbeddedSubtitleFonts = false; // libass owns extracted fonts.
         config.FFmpegOptions["rw_timeout"] = "15000000";
         config.FFmpegOptions["protocol_whitelist"] = "file,http,https,tcp,tls,crypto,data";

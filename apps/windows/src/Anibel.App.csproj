@@ -142,5 +142,6 @@
   </ItemGroup>
   <ItemGroup Condition="'$(EnablePlaybackSmoke)' == 'true'">
     <Compile Include="../../../tools/PlaybackSmoke/NativePlaybackSmoke.cs" Link="Tests/NativePlaybackSmoke.cs" />
+    <Compile Include="../../../tools/PlaybackSmoke/NativePlaybackSmoke.Continuity.cs" Link="Tests/NativePlaybackSmoke.Continuity.cs" />
   </ItemGroup>
 </Project>

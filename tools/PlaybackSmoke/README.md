@@ -46,6 +46,14 @@ no mouse or keyboard input. It verifies audio track selection, not audible sound
 quality or lip sync. Seek checks wait for the requested clock position before
 checking real subtitle pixels; network buffering can delay a seek.
 
+For a longer continuity check, add `continuity-seconds.txt` (10–120 seconds) to an
+isolated live-test directory. Optionally add `continuity-start.txt` with a seek time
+in seconds. The test uses a 1920×1080 window and records clock progress, buffering,
+UI frame intervals, and software decoder sample timestamps in that directory.
+Decoder sample requests and UI refreshes do not prove smooth video presentation;
+inspect the visible picture as well. The check fails if it cannot collect expected
+decoder samples or if the clock or UI stalls beyond its stated limits.
+
 For package testing, publish to a separate test output with
 `-c Release -p:EnablePlaybackSmoke=true --self-contained true`. This includes the
 same native libraries as the normal package. Run that output with the same smoke
