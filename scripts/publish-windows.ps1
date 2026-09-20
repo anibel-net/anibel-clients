@@ -28,11 +28,14 @@ $staging = Join-Path $repository ('artifacts\windows-publish-' + [Guid]::NewGuid
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $visualStudio) { throw 'Visual Studio C++ x64 build tools are required.' }
-$crt = Get-ChildItem (Join-Path $visualStudio 'VC\Redist\MSVC') -Directory |
+$crtVersions = Get-ChildItem (Join-Path $visualStudio 'VC\Redist\MSVC') -Directory |
     Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
-    Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-$crtDirectory = Join-Path $crt.FullName 'x64\Microsoft.VC143.CRT'
-if (-not (Test-Path $crtDirectory)) { throw 'VC++ x64 runtime files were not found.' }
+    Sort-Object { [version]$_.Name } -Descending
+$crtDirectory = $crtVersions | ForEach-Object {
+    Get-ChildItem (Join-Path $_.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue
+} | Where-Object { Test-Path (Join-Path $_.FullName 'vcruntime140.dll') } |
+    Select-Object -First 1 -ExpandProperty FullName
+if (-not $crtDirectory) { throw 'VC++ x64 runtime files were not found.' }
 
 dotnet publish $project -c Release -r win-x64 -p:Platform=x64 `
     -p:OptimizeDistribution=true -p:EnablePlaybackSmoke=false `
