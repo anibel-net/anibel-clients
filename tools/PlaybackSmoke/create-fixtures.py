@@ -2,7 +2,7 @@
 import argparse
 import json
 import os
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 import subprocess
 
 parser = argparse.ArgumentParser()
@@ -51,6 +51,6 @@ run('-i', 'input.mp4', '-map', '0:v', '-map', '0:a:0', '-c', 'copy',
 (root / 'sources.json').write_text(json.dumps([
     str(root / 'input.mp4'), f'http://127.0.0.1:{args.port}/stream.m3u8',
     f'http://127.0.0.1:{args.port}/master.m3u8', f'http://127.0.0.1:{args.port}/stream.mpd',
-    'separate-audio', str(root / 'download.mkv'), '\\\\?\\' + str(PureWindowsPath(root / 'download.mkv'))
+    'separate-audio', str(root / 'download.mkv'), '\\\\?\\' + str(root / 'download.mkv').replace('/', '\\')
 ]), encoding='utf-8')
 print(root)
