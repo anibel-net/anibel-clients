@@ -1,12 +1,12 @@
 # Shared application core
 
-Status: implemented for the current Windows app. Protocol: 2. Updated: 2026-09-13.
+Status: shared by Windows and Android. Protocol: 2. Updated: 2026-09-20.
 
 ## Purpose and scope
 
-Rust is the source of truth for shared application behavior. Windows is a native
-UI and OS adapter. Future Swift and Kotlin clients must use the same application
-commands. Those clients and their platform bindings are not implemented here.
+Rust is the source of truth for shared application behavior. Windows and Android
+are native UI and OS adapters. Future Swift clients must use the same application
+commands; Apple clients are not implemented here.
 
 This is a new project. The app and core ship together. There is no import of old
 Windows cache, download, resume, or credential files, and no compatibility layer
@@ -21,7 +21,7 @@ for the old native policy services. Old files are not deleted automatically.
 | Profiles and comments | Profile ownership, image validation and upload, profile updates, comment API and nested reply data | Image picker, edit draft, public profile navigation, reply target and tree layout |
 | User changes | Favorite, mark and watched commands; cache invalidation | Requested selection and result display |
 | Downloads | Queue, workers, retry/cancel/delete, asset manifests, local library and export | UI projection, folder picker, OS file access and execution time |
-| Playback | Source choice, subtitle/font assets, default tracks, resume and history | mpv/WebView2, surfaces, transport controls, audio focus, system media controls and PiP |
+| Playback | Source choice, subtitle/font assets, default tracks, resume and history | Windows MediaPlayer/WebView2 or Android Media3, libass, surfaces, controls, audio focus and PiP |
 | Reader | Online/offline page choice, previous/next chapter choice and history | Images, reading layout, page/scroll position, zoom and window controls |
 | Storage | Data formats, bounds, atomic writes and asset cleanup | Private writable directory; DPAPI/Keychain/Android credential store |
 

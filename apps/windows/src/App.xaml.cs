@@ -58,6 +58,8 @@ public partial class App : Application
         var settings = new SettingsService();
         settings.Load(); // persisted language/API endpoints — before anything reads them
         builder.Services.AddSingleton(settings);
+        builder.Services.AddSingleton<IReleaseUpdateSource, ReleaseUpdateSource>();
+        builder.Services.AddSingleton<AppUpdateService>();
         builder.Services.AddSingleton<CoreClient>();
         builder.Services.AddSingleton<ICoreClient>(sp => sp.GetRequiredService<CoreClient>());
         builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
@@ -82,6 +84,7 @@ public partial class App : Application
         _ = Services.GetRequiredService<DownloadService>();
 
         _boot = BootCoreAsync();
+        Services.GetRequiredService<AppUpdateService>().Start();
     }
 
     /// <summary>
@@ -160,6 +163,7 @@ public partial class App : Application
     internal async Task StopAsync()
     {
         _stopping = true;
+        if (_host is not null) await Services.GetRequiredService<AppUpdateService>().StopAsync();
         await _boot;
         if (_statePump is not null) await _statePump.StopAsync();
         await ImageLoader.Shared.StopAsync();

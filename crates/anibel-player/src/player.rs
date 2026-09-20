@@ -309,8 +309,14 @@ mod tests {
             Some("https://n3.anibel.stream/dash/8c52d132/manifest.m3u8")
         );
         assert_eq!(intent.subtitles.len(), 2);
-        assert_eq!(intent.subtitles[0].url, "https://subtitles.anibel.net/8c52d132/ep13.ass");
-        assert_eq!(intent.subtitles[1].url, "https://n3.anibel.stream/subtitles/8c52d132/субцітры.ass");
+        assert_eq!(
+            intent.subtitles[0].url,
+            "https://subtitles.anibel.net/8c52d132/ep13.ass"
+        );
+        assert_eq!(
+            intent.subtitles[1].url,
+            "https://n3.anibel.stream/subtitles/8c52d132/субцітры.ass"
+        );
         assert_eq!(intent.subtitles[0].label.as_deref(), Some("ep13"));
         assert_eq!(intent.fonts[0].family, "Montserrat");
         assert_eq!(intent.duration_secs, Some(600.0));

@@ -38,6 +38,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     private bool _paused = true;
     private double? _seekTarget;
     private bool _changingSource;
+    private readonly HashSet<MediaPlaybackSession> _bufferingSessions = [];
     public Task CleanupCompleted { get; private set; } = Task.CompletedTask;
     private long _subtitle;
     private readonly CancellationTokenSource _lifetime = new();
@@ -56,7 +57,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         _player.TimelineController = _timeline;
         _surface.SetMediaPlayer(_player);
         _player.MediaFailed += OnMediaFailed;
-        _player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
+        ObserveBuffering(_player.PlaybackSession);
         _timeline.Ended += OnEnded;
         _timeline.PositionChanged += OnTimelinePositionChanged;
         _timer = _dispatcher.CreateTimer();
@@ -75,6 +76,9 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     public bool IsPaused => _paused;
     public double Position => _seekTarget ?? ActualPosition;
     private double ActualPosition => _timeline.Position.TotalSeconds;
+    public bool IsBuffering => _changingSource || IsSeeking || _bufferingSessions.Count > 0
+        || _player.PlaybackSession.PlaybackState is MediaPlaybackState.Opening or MediaPlaybackState.Buffering
+        || _audio?.PlaybackSession.PlaybackState is MediaPlaybackState.Opening or MediaPlaybackState.Buffering;
     public bool IsSeeking => _seekTarget.HasValue;
     internal bool IsChangingSource => _changingSource;
     public double Duration => _player.PlaybackSession.NaturalDuration.TotalSeconds;
@@ -121,6 +125,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
                 _audio.CommandManager.IsEnabled = false;
                 _audio.TimelineController = _timeline;
                 _audio.MediaFailed += OnMediaFailed;
+                ObserveBuffering(_audio.PlaybackSession);
                 _audioItem = new MediaPlaybackItem(await CreateSourceAsync(intent.AudioSrc, false, ct));
                 if (_disposed) return;
                 audioOpened = WaitForOpenAsync(_audio, ct);
@@ -141,9 +146,11 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             _timer.Start();
             CompositionTarget.Rendering += OnRendering;
             // Start before Ready: core resume can then seek without Start resetting it.
-            _timeline.Start();
+            _timeline.Position = TimeSpan.Zero;
             _paused = false;
+            ApplyTimelineState();
             Ready?.Invoke();
+            NotifyBuffering();
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -307,7 +314,6 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             if (!_disposed)
             {
                 StartPendingSeek();
-                if (!_paused) _timeline.Resume();
                 NotifyBuffering();
             }
             _qualitySwitch.Release();
@@ -339,8 +345,8 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     }
     public void TogglePause()
     {
-        if (_paused) _timeline.Resume(); else _timeline.Pause();
         _paused = !_paused;
+        ApplyTimelineState();
         PauseChanged?.Invoke(_paused);
     }
     public void Seek(double seconds)
@@ -350,7 +356,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         if (!_seekTarget.HasValue && Math.Abs(_timeline.Position.TotalSeconds - target) < 0.05) return;
         _seekTarget = target;
         PositionChanged?.Invoke(Position, Duration);
-        BufferingChanged?.Invoke(true);
+        NotifyBuffering();
         // Let the control paint first. While seeking, keep only the newest drag position.
         OnUi(StartPendingSeek);
     }
@@ -369,7 +375,6 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         _timeline.PositionChanged += OnTimelinePositionChanged;
         _player.TimelineController = next;
         if (_audio is not null) _audio.TimelineController = next;
-        if (!_paused) next.Resume();
         _seekTarget = null;
         PositionChanged?.Invoke(Position, Duration);
         NotifyBuffering();
@@ -379,8 +384,41 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     {
         if (IsInitialized) NotifyBuffering();
     });
-    private void NotifyBuffering() => BufferingChanged?.Invoke(_changingSource || IsSeeking ||
-        _player.PlaybackSession.PlaybackState == MediaPlaybackState.Buffering);
+    private void ObserveBuffering(MediaPlaybackSession session)
+    {
+        session.PlaybackStateChanged += OnPlaybackStateChanged;
+        session.BufferingStarted += OnBufferingStarted;
+        session.BufferingEnded += OnBufferingEnded;
+    }
+    private void StopObservingBuffering(MediaPlaybackSession session)
+    {
+        session.PlaybackStateChanged -= OnPlaybackStateChanged;
+        session.BufferingStarted -= OnBufferingStarted;
+        session.BufferingEnded -= OnBufferingEnded;
+        _bufferingSessions.Remove(session);
+    }
+    private void OnBufferingStarted(MediaPlaybackSession sender, object args) => OnUi(() =>
+    {
+        _bufferingSessions.Add(sender);
+        if (IsInitialized) NotifyBuffering();
+    });
+    private void OnBufferingEnded(MediaPlaybackSession sender, object args) => OnUi(() =>
+    {
+        _bufferingSessions.Remove(sender);
+        if (IsInitialized) NotifyBuffering();
+    });
+    private void ApplyTimelineState()
+    {
+        // Both players must wait at the same clock position. User pause intent
+        // stays separate so ending a buffer cannot override a pause click.
+        if (_paused || IsBuffering) _timeline.Pause();
+        else _timeline.Resume();
+    }
+    private void NotifyBuffering()
+    {
+        ApplyTimelineState();
+        BufferingChanged?.Invoke(IsBuffering);
+    }
     public void SetVolume(double volume) { if (double.IsFinite(volume)) (_audio ?? _player).Volume = Math.Clamp(volume / 100, 0, 1); }
     public void SetMute(bool mute) => (_audio ?? _player).IsMuted = mute;
     public void Resize(uint width, uint height) => InvalidateSurface();
@@ -403,7 +441,17 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     {
         var message = MediaError(args);
         Anibel.App.Services.Diag.Log($"Native playback failed: {message}");
-        OnUi(() => { _seekTarget = null; BufferingChanged?.Invoke(false); Error?.Invoke(message); });
+        OnUi(() =>
+        {
+            IsInitialized = false;
+            _paused = true;
+            _seekTarget = null;
+            _changingSource = false;
+            _bufferingSessions.Clear();
+            _timeline.Pause();
+            BufferingChanged?.Invoke(false);
+            Error?.Invoke(message);
+        });
     }
     private void OnEnded(MediaTimelineController sender, object args) => OnUi(() =>
     {
@@ -426,8 +474,8 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         _timeline.PositionChanged -= OnTimelinePositionChanged;
         _surface.SetMediaPlayer(null);
         _player.MediaFailed -= OnMediaFailed;
-        _player.PlaybackSession.PlaybackStateChanged -= OnPlaybackStateChanged;
-        if (_audio is not null) { _audio.MediaFailed -= OnMediaFailed; _audio.Dispose(); }
+        StopObservingBuffering(_player.PlaybackSession);
+        if (_audio is not null) { StopObservingBuffering(_audio.PlaybackSession); _audio.MediaFailed -= OnMediaFailed; _audio.Dispose(); }
         _player.Dispose();
         foreach (var source in _sources) source.Dispose();
         _sources.Clear();

@@ -36,7 +36,19 @@
             <TextBlock Text="Спампоўкі (афлайн-бібліятэка) не выдаляюцца з кэшам — кіруйце імі на старонцы «Спампаванае»."
                        TextWrapping="Wrap" Opacity="0.55" FontSize="12" />
 
-            <TextBlock x:Name="VersionText" Opacity="0.7" />
+            <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Абнаўленні" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="{x:Bind Updates.VersionLabel}" />
+                    <TextBlock Text="{x:Bind Updates.ChannelLabel}" Opacity="0.7" />
+                    <TextBlock Text="{x:Bind Updates.StatusLabel, Mode=OneWay}" TextWrapping="Wrap" />
+                    <ProgressBar Value="{x:Bind Updates.Progress, Mode=OneWay}" Maximum="100"
+                                 Visibility="{x:Bind Updates.IsDownloading, Mode=OneWay}" />
+                    <Button Content="Праверыць абнаўленні" IsEnabled="{x:Bind Updates.CanCheck, Mode=OneWay}" Click="OnCheckUpdatesClick" />
+                    <Button Content="Перазапусціць і абнавіць" Visibility="{x:Bind Updates.IsReady, Mode=OneWay}" Click="OnRestartUpdateClick" />
+                    <HyperlinkButton Content="Што новага" Click="OnReleasesClick" />
+                </StackPanel>
+            </Border>
             <TextBlock x:Name="Status" Opacity="0.7" Visibility="Collapsed" />
         </StackPanel>
     </ScrollViewer>

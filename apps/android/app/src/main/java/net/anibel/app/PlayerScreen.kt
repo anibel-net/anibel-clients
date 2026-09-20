@@ -106,6 +106,8 @@ internal fun PlayerScreen(args: JSONObject, isTv: Boolean, onBack: (() -> Unit)?
                     override fun onPlaybackStateChanged(state: Int) { playbackState = state }
                     override fun onRenderedFirstFrame() { rendered = true }
                 })
+                if (!isTv) trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .clearViewportSizeConstraints().setForceHighestSupportedBitrate(true).build()
                 setMediaItem(MediaItem.Builder().setUri(uri).setSubtitleConfigurations(subtitles).build())
                 prepare()
                 playWhenReady = true

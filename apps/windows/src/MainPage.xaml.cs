@@ -54,6 +54,7 @@ public sealed partial class MainPage : Page,
         };
     }
 
+    internal bool HasOpenMedia => _media.HasOpenMedia;
     internal bool HasDockedMedia => _media.HasDockedMedia;
     internal Control ContentFocusTarget => ContentFrame;
 

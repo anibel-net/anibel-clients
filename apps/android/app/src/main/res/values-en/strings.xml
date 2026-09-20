@@ -307,4 +307,6 @@
     <string name="player_fill">Fill screen</string>
     <string name="player_fit">Fit video</string>
     <string name="player_pip">Picture-in-picture</string>
+    <string name="player_quality">Video quality</string>
+    <string name="player_highest">Highest available</string>
 </resources>

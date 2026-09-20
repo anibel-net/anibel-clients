@@ -172,6 +172,27 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 await engine.LoadAsync(intent, subs, timeout.Token);
                 await WaitUntilAsync(() => failure is not null || (engine.Position > 0.2 && engine.Duration > 3), "Playback clock/duration failed");
                 Check(failure is null, failure ?? "");
+                if (source == "separate-audio")
+                {
+                    var audioPlayer = (Windows.Media.Playback.MediaPlayer)typeof(WindowsMediaEngine)
+                        .GetField("_audio", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(engine)!;
+                    Check(ReferenceEquals(video.MediaPlayer.TimelineController, audioPlayer.TimelineController), "Audio/video use different clocks");
+                    void Buffer(string name, Windows.Media.Playback.MediaPlaybackSession session) => typeof(WindowsMediaEngine)
+                        .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(engine, [session, new object()]);
+                    Buffer("OnBufferingStarted", video.MediaPlayer.PlaybackSession);
+                    Buffer("OnBufferingStarted", audioPlayer.PlaybackSession);
+                    await WaitUntilAsync(() => engine.IsBuffering, "Separate audio buffering was lost");
+                    Buffer("OnBufferingEnded", video.MediaPlayer.PlaybackSession);
+                    await Task.Delay(300);
+                    Check(engine.IsBuffering, "Video resumed before audio was ready");
+                    var held = engine.Position;
+                    await Task.Delay(300);
+                    Check(Math.Abs(engine.Position - held) < .05, "Shared clock ran during audio buffering");
+                    Buffer("OnBufferingEnded", audioPlayer.PlaybackSession);
+                    await WaitUntilAsync(() => !engine.IsBuffering && engine.Position > held + .1, "Shared clock did not resume");
+                    Check(Math.Abs(video.MediaPlayer.PlaybackSession.Position.TotalSeconds - audioPlayer.PlaybackSession.Position.TotalSeconds) < .15, "Audio/video clocks diverged after buffering");
+                    _results.Add("PASS separate audio/video buffering and synchronized resume");
+                }
                 Check(engine.ReadSubtitleTracks().Length > 0, "Subtitle track missing");
                 Check(engine.ReadVideoTracks().Length > 0, "Video tracks missing");
                 // Real dialogue may start after the opening. Seek to its first ASS event.
@@ -288,7 +309,12 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 engine.SetSubTrack(engine.ReadSubtitleTracks()[0].Id);
                 engine.TogglePause();
                 await WaitUntilAsync(() => !engine.IsPaused, "Resume state failed");
+                try {
                 await WaitUntilAsync(() => Math.Abs(video.MediaPlayer.PlaybackSession.Position.TotalSeconds - engine.Position) < 1 && engine.Position >= subtitlePosition && engine.Position < subtitlePosition + 20, "Decoded playback did not follow the new seek timeline");
+                } catch {
+                    _results.Add($"BUFFER DIAG buffer={engine.IsBuffering} pause={engine.IsPaused} seek={engine.IsSeeking} clock={engine.Position} decoded={video.MediaPlayer.PlaybackSession.Position} state={video.MediaPlayer.PlaybackSession.PlaybackState} timeline={video.MediaPlayer.TimelineController.State}");
+                    throw;
+                }
                 var before = overlay.Width;
                 _window!.AppWindow.Resize(new Windows.Graphics.SizeInt32(480, 320));
                 await Task.Delay(350);
@@ -331,6 +357,30 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                         ((Anibel.App.Views.EmptyState)host.FindName("ErrorState")).Message);
                     var player = ((MediaPlayerElement)host.FindName("VideoPanel")).MediaPlayer;
                     Check(player.PlaybackSession.NaturalVideoWidth > 0, "PlayerHost video is missing");
+                    // Inject native buffering notifications through the actual engine/host path.
+                    // The timeline and visible loader must follow buffering, not play intent.
+                    var controller = (PlayerController)typeof(PlayerHost).GetField("_controller", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host)!;
+                    var native = (WindowsMediaEngine)controller.Engine!;
+                    void BufferEvent(string name) => typeof(WindowsMediaEngine).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(native, [player.PlaybackSession, new object()]);
+                    BufferEvent("OnBufferingStarted");
+                    await WaitUntilAsync(() => native.IsBuffering, "Buffering event was lost");
+                    var ring = (ProgressRing)host.FindName("BusyRing");
+                    Check(ring.IsActive && ((StackPanel)host.FindName("Overlay")).Visibility == Visibility.Visible, "Buffering loader is hidden");
+                    var heldAt = player.TimelineController.Position;
+                    await Task.Delay(400);
+                    Check(Math.Abs((player.TimelineController.Position - heldAt).TotalSeconds) < .05, "Clock runs during buffering");
+                    host.TogglePlayback();
+                    Check(host.IsPaused, "Pause during buffering was lost");
+                    BufferEvent("OnBufferingEnded");
+                    await WaitUntilAsync(() => !native.IsBuffering, "Buffering did not end");
+                    Check(!ring.IsActive, "Buffering loader did not stop");
+                    heldAt = player.TimelineController.Position;
+                    await Task.Delay(300);
+                    Check(Math.Abs((player.TimelineController.Position - heldAt).TotalSeconds) < .05, "Buffering end overrode user pause");
+                    host.TogglePlayback();
+                    await WaitUntilAsync(() => player.TimelineController.Position > heldAt + TimeSpan.FromMilliseconds(100), "Playback did not resume after buffering");
+                    _results.Add("PASS buffering loader, held clock, and pause intent");
                     await host.ShowQualityMenuAsync((Button)host.FindName("QualityButton"));
                     Check(host.IsQualityMenuOpen, "PlayerHost settings did not open");
                     host.SetMini(true);
@@ -385,6 +435,8 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
             .AddTransient<Anibel.App.ViewModels.MediaDetailsViewModel>()
             .AddTransient<Anibel.App.ViewModels.ProfileViewModel>()
             .AddTransient<Anibel.App.ViewModels.ProfileListViewModel>()
+            .AddSingleton<Anibel.App.Services.IReleaseUpdateSource, Anibel.App.Services.ReleaseUpdateSource>()
+            .AddSingleton<Anibel.App.Services.AppUpdateService>()
             .AddSingleton<Anibel.App.Services.DownloadService>()
             .AddTransient<Anibel.App.ViewModels.DownloadsViewModel>()
             .BuildServiceProvider();
@@ -448,7 +500,7 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         {
             new Anibel.App.Views.CatalogPage(), new Anibel.App.Views.SearchPage(),
             new Anibel.App.Views.MediaDetailsPage(), new Anibel.App.Views.ProfilePage(),
-            new Anibel.App.Views.ProfileListPage(), new Anibel.App.Views.DownloadsPage(),
+            new Anibel.App.Views.ProfileListPage(), new Anibel.App.Views.DownloadsPage(), new Anibel.App.Views.SettingsPage(),
         })
         {
             _window!.Content = page;

@@ -26,7 +26,7 @@ import androidx.media3.ui.compose.material3.buttons.SeekBackButton
 import androidx.media3.ui.compose.material3.buttons.SeekForwardButton
 import androidx.media3.ui.compose.state.rememberProgressStateWithTickInterval
 
-private enum class PlayerMenu { Settings, Audio, Subtitles, Speed }
+private enum class PlayerMenu { Settings, Quality, Audio, Subtitles, Speed }
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -77,6 +77,7 @@ internal fun MaterialPlayerControls(player: Player, fillScreen: Boolean, onToggl
                             Icon(painterResource(R.drawable.ic_settings), ui(R.string.settings))
                         }
                         DropdownMenu(menu == PlayerMenu.Settings, { menu = null }) {
+                            DropdownMenuItem(text = { Text(ui(R.string.player_quality)) }, onClick = { menu = PlayerMenu.Quality })
                             DropdownMenuItem(text = { Text(ui(R.string.player_audio)) }, onClick = { menu = PlayerMenu.Audio })
                             DropdownMenuItem(text = { Text(ui(R.string.player_speed)) }, onClick = { menu = PlayerMenu.Speed })
                         }
@@ -116,12 +117,40 @@ internal fun MaterialPlayerControls(player: Player, fillScreen: Boolean, onToggl
     val active = menu
     if (active != null && active != PlayerMenu.Settings) AlertDialog(onDismissRequest = { menu = null },
         title = { Text(ui(when (active) {
+            PlayerMenu.Quality -> R.string.player_quality
             PlayerMenu.Audio -> R.string.player_audio
             PlayerMenu.Subtitles -> R.string.choice_sub
             else -> R.string.player_speed
         })) }, text = {
             Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
-                if (active == PlayerMenu.Speed) listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { value ->
+                if (active == PlayerMenu.Quality) {
+                    val videos = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                    val overridden = videos.any { parameters.overrides.containsKey(it.mediaTrackGroup) }
+                    PlayerOption(ui(R.string.player_highest), !overridden && parameters.forceHighestSupportedBitrate) {
+                        player.trackSelectionParameters = parameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                            .setForceHighestSupportedBitrate(true).build()
+                        menu = null
+                    }
+                    PlayerOption(ui(R.string.player_auto), !overridden && !parameters.forceHighestSupportedBitrate) {
+                        player.trackSelectionParameters = parameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                            .setForceHighestSupportedBitrate(false).build()
+                        menu = null
+                    }
+                    videos.flatMap { group -> (0 until group.length).filter { group.isTrackSupported(it) }.map { group to it } }
+                        .sortedWith(compareByDescending<Pair<Tracks.Group, Int>> { (group, index) -> group.getTrackFormat(index).height }
+                            .thenByDescending { (group, index) -> group.getTrackFormat(index).bitrate })
+                        .distinctBy { (group, index) -> group.getTrackFormat(index).height.takeIf { it > 0 } ?: (group to index) }
+                        .forEach { (group, index) ->
+                            val format = group.getTrackFormat(index)
+                            val label = if (format.height > 0) "${format.height}p" else format.label ?: ui(R.string.player_track, index + 1)
+                            val selected = parameters.overrides[group.mediaTrackGroup]?.trackIndices?.contains(index) == true
+                            PlayerOption(label, selected) {
+                                player.trackSelectionParameters = parameters.buildUpon().setForceHighestSupportedBitrate(false)
+                                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index)).build()
+                                menu = null
+                            }
+                        }
+                } else if (active == PlayerMenu.Speed) listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { value ->
                     PlayerOption("${value}×", speed == value) { player.setPlaybackSpeed(value); menu = null }
                 } else {
                     val type = if (active == PlayerMenu.Audio) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT

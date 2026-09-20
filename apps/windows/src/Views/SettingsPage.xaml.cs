@@ -3,8 +3,6 @@ using Anibel.App.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System.IO;
-using System.Reflection;
 
 namespace Anibel.App.Views;
 
@@ -12,15 +10,15 @@ public sealed partial class SettingsPage : Page
 {
     private static readonly string[] LangKeys = ["be", "ru"];
 
-    private readonly CoreClient _core;
     private readonly SettingsService _settings;
     private bool _initialized;
+    public AppUpdateService Updates { get; }
 
     public SettingsPage()
     {
         NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
+        Updates = App.Services.GetRequiredService<AppUpdateService>();
         InitializeComponent();
-        _core = App.Services.GetRequiredService<CoreClient>();
         _settings = App.Services.GetRequiredService<SettingsService>();
 
         // populate BEFORE attaching the handler so restoring state never saves
@@ -29,21 +27,21 @@ public sealed partial class SettingsPage : Page
         ApiUrlBox.Text = _settings.ApiBaseUrl;
         VideoApiUrlBox.Text = _settings.VideoBaseUrl;
         _initialized = true;
+    }
 
-
-        Loaded += async (_, _) =>
+    private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e) => await Updates.CheckAsync();
+    private async void OnRestartUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (App.CurrentWindow is MainWindow window)
         {
-            try
-            {
-                var coreVersion = await _core.GetVersionAsync();
-                var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
-                VersionText.Text = $"anibel-core {coreVersion.Version} · anibel-windows {appVersion}";
-            }
-            catch (Exception ex)
-            {
-                VersionText.Text = ex.Message;
-            }
-        };
+            try { await window.RestartForUpdateAsync(); }
+            catch (Exception ex) { ShowStatus(ex.Message); }
+        }
+    }
+    private async void OnReleasesClick(object sender, RoutedEventArgs e)
+    {
+        if (Uri.TryCreate(ReleaseUpdateSource.Repository + "/releases", UriKind.Absolute, out var uri))
+            await Windows.System.Launcher.LaunchUriAsync(uri);
     }
 
     private void OnLanguageChanged(object sender, SelectionChangedEventArgs e)

@@ -120,8 +120,7 @@ fn processed_time(text: &str) -> f64 {
         .filter(|line| line.ends_with('\n'))
         .map(str::trim)
         .filter_map(|line| line.strip_prefix("out_time_us=")?.parse::<f64>().ok())
-        .filter(|value| value.is_finite() && *value >= 0.0)
-        .last()
+        .rfind(|value| value.is_finite() && *value >= 0.0)
         .unwrap_or(0.0)
         / 1_000_000.0
 }

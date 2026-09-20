@@ -21,6 +21,29 @@ namespace Anibel.App;
 public sealed partial class MainWindow : Window,
     IRecipient<SessionChangedMessage>
 {
+    public AppUpdateService Updates { get; }
+    private bool _restartForUpdate;
+
+    public async Task RestartForUpdateAsync()
+    {
+        if (!Updates.IsReady) return;
+        var downloads = App.Services.GetRequiredService<DownloadService>();
+        await downloads.RefreshAsync();
+        if (downloads.Items.Any(item => item.IsActive) || RootFrame.Content is MainPage { HasOpenMedia: true })
+            throw new InvalidOperationException("Спачатку закрыйце прайгравальнік і дачакайцеся завяршэння спамповак.");
+        var instances = System.Diagnostics.Process.GetProcessesByName("Anibel.Net");
+        try
+        {
+            if (instances.Length > 1) throw new InvalidOperationException("Спачатку закрыйце іншыя вокны Anibel.Net.");
+        }
+        finally { foreach (var instance in instances) instance.Dispose(); }
+        _restartForUpdate = true;
+        Close();
+    }
+
+    private void OnUpdateDetailsClick(object sender, RoutedEventArgs e)
+        => WeakReferenceMessenger.Default.Send(new NavigateMessage("settings"));
+
     private enum ClosePhase { Active, Waiting, Complete }
     private const double TitleVisibleMinWidth = 820;
     private const double SearchMaxWidth = 520;
@@ -89,6 +112,7 @@ public sealed partial class MainWindow : Window,
 
     public MainWindow()
     {
+        Updates = App.Services.GetRequiredService<AppUpdateService>();
         InitializeComponent();
         WindowRoot.AddHandler(UIElement.PointerReleasedEvent,
             new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
@@ -145,6 +169,11 @@ public sealed partial class MainWindow : Window,
             {
                 if (RootFrame.Content is MainPage page) await page.ClosePlaybackAsync();
                 if (Application.Current is App app) await app.StopAsync();
+                if (_restartForUpdate)
+                {
+                    try { Updates.ApplyAndRestart(); }
+                    catch (Exception ex) { Diag.Log($"Could not apply update: {ex}"); }
+                }
             }
             finally { closePhase = ClosePhase.Complete; DispatcherQueue.TryEnqueue(Close); }
         };

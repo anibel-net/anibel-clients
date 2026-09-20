@@ -233,6 +233,7 @@ internal sealed class OpenMediaWorkspace(Panel PlayerLayer, DropDownButton OpenT
         if (DockedTitle?.Host is ReaderHost reader) reader.SetOsFullscreen(false);
     }
 
+    public bool HasOpenMedia => _titles.Count > 0;
     public bool HasDockedMedia => DockedTitle is not null;
     public bool IsFullscreen => _inAppFullscreen;
     public bool HandleBack()

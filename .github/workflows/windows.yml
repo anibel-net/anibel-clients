@@ -3,13 +3,23 @@ name: windows
 on:
   push:
     branches: [main]
-    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", ".github/workflows/windows.yml"]
+    tags: ["windows-v*"]
+    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", "tools/UpdateSmoke/**", ".config/dotnet-tools.json", ".github/workflows/windows.yml"]
   pull_request:
-    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "core/**", "crates/**", "scripts/**", "tools/PlaybackSmoke/**", "tools/UpdateSmoke/**", ".config/dotnet-tools.json", ".github/workflows/windows.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: apps/windows/src
@@ -73,9 +83,67 @@ jobs:
         working-directory: .
         run: scripts/test-windows-playback.ps1 -AppExe artifacts/playback-smoke/Anibel.Net.exe
 
+      - name: Prepare tagged release
+        if: startsWith(github.ref, 'refs/tags/windows-v')
+        working-directory: .
+        env:
+          RELEASE_REPOSITORY: ${{ vars.WINDOWS_RELEASE_REPOSITORY || format('https://github.com/{0}', github.repository) }}
+          GH_TOKEN: ${{ secrets.WINDOWS_RELEASE_TOKEN || github.token }}
+          VPK_TOKEN: ${{ secrets.WINDOWS_RELEASE_TOKEN || github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring('windows-v'.Length)
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.(0|[1-9][0-9]*))?$') { throw 'Invalid Windows release tag.' }
+          $channel = if ($version.Contains('-')) { 'win-x64-preview' } else { 'win-x64' }
+          "WINDOWS_VERSION=$version" >> $env:GITHUB_ENV
+          "WINDOWS_CHANNEL=$channel" >> $env:GITHUB_ENV
+          "WINDOWS_RELEASE_REPOSITORY=$env:RELEASE_REPOSITORY" >> $env:GITHUB_ENV
+          $repo = $env:RELEASE_REPOSITORY.Replace('https://github.com/', '').TrimEnd('/')
+          $metadata = gh api "repos/$repo" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $metadata.private) { throw 'Updates require a public release repository.' }
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { throw 'Tool restore failed.' }
+          $pages = gh api "repos/$repo/releases" --paginate --slurp | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not list existing releases.' }
+          $previous = @($pages | ForEach-Object { $_ } | Where-Object { -not $_.draft -and $_.assets.name -contains "releases.$channel.json" })
+          if ($previous.Count -gt 0) {
+            $extra = if ($version.Contains('-')) { @('--pre') } else { @() }
+            dotnet tool run vpk download github --repoUrl $env:RELEASE_REPOSITORY --channel $channel --outputDir artifacts/releases @extra
+            if ($LASTEXITCODE -ne 0) { throw 'Could not download the previous package for delta updates.' }
+            $previousPackage = Get-ChildItem artifacts/releases -Filter "Anibel.Net-*-$channel-full.nupkg" | Select-Object -First 1
+            if (-not $previousPackage) { throw 'Previous full package was not found.' }
+            $previousVersion = $previousPackage.Name.Substring('Anibel.Net-'.Length).Replace("-$channel-full.nupkg", '')
+            "WINDOWS_PREVIOUS_VERSION=$previousVersion" >> $env:GITHUB_ENV
+          }
+
       - name: Publish share archive
+        if: ${{ !startsWith(github.ref, 'refs/tags/windows-v') }}
         working-directory: .
         run: scripts/publish-windows.ps1
+
+      - name: Build unsigned installer and update packages
+        if: startsWith(github.ref, 'refs/tags/windows-v')
+        working-directory: .
+        run: scripts/publish-windows.ps1 -Version $env:WINDOWS_VERSION -UpdateRepository $env:WINDOWS_RELEASE_REPOSITORY -Installer
+
+      - name: Verify full and delta update downloads
+        if: startsWith(github.ref, 'refs/tags/windows-v') && env.WINDOWS_PREVIOUS_VERSION != ''
+        working-directory: .
+        run: dotnet run --project tools/UpdateSmoke -- artifacts/releases $env:WINDOWS_PREVIOUS_VERSION $env:WINDOWS_VERSION $env:WINDOWS_CHANNEL
+
+      - name: Create draft GitHub release
+        if: startsWith(github.ref, 'refs/tags/windows-v')
+        working-directory: .
+        env:
+          VPK_TOKEN: ${{ secrets.WINDOWS_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.WINDOWS_RELEASE_TOKEN || github.token }}
+        run: |
+          $extra = if ($env:WINDOWS_VERSION.Contains('-')) { @('--pre') } else { @() }
+          dotnet tool run vpk upload github --repoUrl $env:WINDOWS_RELEASE_REPOSITORY --channel $env:WINDOWS_CHANNEL `
+            --outputDir artifacts/releases --tag $env:GITHUB_REF_NAME --releaseName "Anibel.Net $env:WINDOWS_VERSION" @extra
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed.' }
+          $repo = $env:WINDOWS_RELEASE_REPOSITORY.Replace('https://github.com/', '').TrimEnd('/')
+          gh release upload $env:GITHUB_REF_NAME artifacts/share/Anibel-Windows-x64.zip artifacts/share/Anibel-Windows-x64.zip.sha256 --repo $repo
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP upload failed.' }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -84,4 +152,5 @@ jobs:
           path: |
             artifacts/share/Anibel-Windows-x64.zip
             artifacts/share/Anibel-Windows-x64.zip.sha256
+            artifacts/releases/*
           if-no-files-found: error

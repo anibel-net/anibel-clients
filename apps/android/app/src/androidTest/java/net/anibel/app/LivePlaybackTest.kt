@@ -83,6 +83,36 @@ class LivePlaybackTest {
             org.junit.Assert.assertEquals(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
                 compose.activity.findViewById<androidx.media3.ui.PlayerView>(R.id.native_player).resizeMode)
         }
+        var qualityLabel = ""
+        var qualityHeight = 0
+        compose.runOnIdle {
+            val player = compose.activity.findViewById<androidx.media3.ui.PlayerView>(R.id.native_player).player!!
+            org.junit.Assert.assertTrue(player.trackSelectionParameters.forceHighestSupportedBitrate)
+            val video = player.currentTracks.groups.filter { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO }
+                .flatMap { group -> (0 until group.length).filter { group.isTrackSupported(it) }.map { group to it } }
+                .minBy { (group, index) -> group.getTrackFormat(index).height }
+            qualityHeight = video.first.getTrackFormat(video.second).height
+            qualityLabel = "${qualityHeight}p"
+        }
+        compose.onNodeWithTag("player_settings").performClick()
+        compose.onNodeWithText(ui(R.string.player_quality)).performClick()
+        compose.onNodeWithText(qualityLabel).performScrollTo().performClick()
+        compose.runOnIdle {
+            val player = compose.activity.findViewById<androidx.media3.ui.PlayerView>(R.id.native_player).player!!
+            val override = player.trackSelectionParameters.overrides.values.single { it.mediaTrackGroup.type == androidx.media3.common.C.TRACK_TYPE_VIDEO }
+            org.junit.Assert.assertEquals(qualityHeight, override.mediaTrackGroup.getFormat(override.trackIndices.single()).height)
+            org.junit.Assert.assertFalse(player.playWhenReady)
+        }
+        for (label in listOf(R.string.player_auto, R.string.player_highest)) {
+            compose.onNodeWithTag("player_settings").performClick()
+            compose.onNodeWithText(ui(R.string.player_quality)).performClick()
+            compose.onNodeWithText(ui(label)).performScrollTo().performClick()
+            compose.runOnIdle {
+                val parameters = compose.activity.findViewById<androidx.media3.ui.PlayerView>(R.id.native_player).player!!.trackSelectionParameters
+                org.junit.Assert.assertEquals(label == R.string.player_highest, parameters.forceHighestSupportedBitrate)
+                org.junit.Assert.assertFalse(parameters.overrides.keys.any { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO })
+            }
+        }
         var beforeSeek = 0L
         compose.runOnIdle { beforeSeek = compose.activity.findViewById<androidx.media3.ui.PlayerView>(R.id.native_player).player!!.currentPosition }
         compose.onNodeWithTag("player_seek_forward").performClick()

@@ -121,9 +121,9 @@ public sealed partial class PlayerHost : UserControl
         }
         finally
         {
-            if (!controller.IsDisposed && ReferenceEquals(_opening, opening))
+            if (!controller.IsDisposed && ReferenceEquals(_opening, opening) && ErrorHost.Visibility != Visibility.Visible)
             {
-                SetBusy(false);
+                SetBuffering((_controller?.Engine as WindowsMediaEngine)?.IsBuffering == true);
             }
         }
     }
@@ -205,11 +205,7 @@ public sealed partial class PlayerHost : UserControl
         _controller.Ended += OnEngineEnded;
         _controller.PositionChanged += OnEnginePositionChanged;
         _controller.PauseChanged += OnEnginePauseChanged;
-        _controller.BufferingChanged += buffering =>
-        {
-            StatusText.Text = buffering ? "Буферызацыя…" : "";
-            SetBusy(buffering);
-        };
+        _controller.BufferingChanged += SetBuffering;
         _controller.Error += message => SetStatus(message, error: true);
     }
 
@@ -222,7 +218,7 @@ public sealed partial class PlayerHost : UserControl
                 _controller?.Resize((uint)VideoPanel.ActualWidth, (uint)VideoPanel.ActualHeight);
         });
         HideError();
-        Overlay.Visibility = Visibility.Collapsed;
+        SetBuffering((_controller?.Engine as WindowsMediaEngine)?.IsBuffering == true);
         var native = _controller?.Controls is not null;
         var transportVisibility = native ? Visibility.Visible : Visibility.Collapsed;
         foreach (var control in new FrameworkElement[] { PlayPauseButton, SeekBackButton, SeekForwardButton,
@@ -510,6 +506,12 @@ public sealed partial class PlayerHost : UserControl
 
     private static string FormatTime(double seconds) => PlaybackTimeConverter.Format(seconds);
 
+    private void SetBuffering(bool buffering)
+    {
+        StatusText.Text = buffering ? "Буферызацыя…" : "";
+        SetBusy(buffering);
+    }
+
     private void SetBusy(bool busy)
     {
         if (busy)
@@ -518,7 +520,7 @@ public sealed partial class PlayerHost : UserControl
         }
         BusyRing.IsActive = busy;
         BusyRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        Overlay.Visibility = busy ? Visibility.Visible : Overlay.Visibility;
+        Overlay.Visibility = busy || !string.IsNullOrEmpty(StatusText.Text) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SetStatus(string message, bool error = false)

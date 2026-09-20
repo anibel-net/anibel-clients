@@ -307,4 +307,6 @@
     <string name="player_fill">Запоўніць экран</string>
     <string name="player_fit">Паказаць відэа цалкам</string>
     <string name="player_pip">Відарыс у відарысе</string>
+    <string name="player_quality">Якасць відэа</string>
+    <string name="player_highest">Найвышэйшая даступная</string>
 </resources>

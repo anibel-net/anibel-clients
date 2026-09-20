@@ -32,3 +32,15 @@ Thumbs.db
 
 # Local cache
 artifacts/
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pfx
+*.p12
+*.pem
+*.key
+*.jks
+*.keystore
