@@ -41,6 +41,27 @@ public class SelectionProxy : DispatchProxy
     }
 }
 
+internal sealed class DecoderTestLog : FFmpegInteropX.ILogProvider
+{
+    public void Log(FFmpegInteropX.LogLevel level, string message)
+        => Anibel.App.Services.Diag.Log("FFmpeg: " + System.Text.RegularExpressions.Regex.Replace(message, @"https?://[^\s'""<>]+", "[URL]"));
+}
+
+internal sealed class RestartTestSource : Anibel.App.Services.IReleaseUpdateSource
+{
+    public bool IsInstalled => true;
+    public string? PendingVersion => "99.0.0";
+    public int ApplyCalls { get; private set; }
+    public bool FailApply { get; set; }
+    public Task<string?> CheckAsync() => Task.FromResult<string?>(PendingVersion);
+    public Task DownloadAsync(Action<int> progress, CancellationToken ct) => Task.CompletedTask;
+    public void PrepareRestart()
+    {
+        ApplyCalls++;
+        if (FailApply) throw new InvalidOperationException("Test updater start failure");
+    }
+}
+
 internal sealed class NativePlaybackSmoke(Application application, string directory)
 {
     private Window? _window;
@@ -48,6 +69,8 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
 
     public void Start()
     {
+        FFmpegInteropX.FFmpegInteropLogging.SetLogLevel(FFmpegInteropX.LogLevel.Warning);
+        FFmpegInteropX.FFmpegInteropLogging.SetLogProvider(new DecoderTestLog());
         application.UnhandledException += (_, e) =>
         {
             File.WriteAllText(Path.Combine(directory, "result.txt"), "UNHANDLED " + e.Exception);
@@ -80,9 +103,9 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         return bytes;
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition, string message)
+    private static async Task WaitUntilAsync(Func<bool> condition, string message, int attempts = 150)
     {
-        for (var attempt = 0; attempt < 150; attempt++)
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             if (condition()) return;
             await Task.Delay(100);
@@ -151,8 +174,8 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 string? failure = null;
                 var preferDub = source.EndsWith("#dub", StringComparison.Ordinal);
 
-                var path = source == "separate-audio" ? Path.Combine(directory, "input.mp4") : source;
-                var audio = source == "separate-audio" ? Path.Combine(directory, "audio.m4a") : null;
+                var path = source.EndsWith("separate-audio", StringComparison.Ordinal) ? Path.Combine(directory, source.StartsWith("high10", StringComparison.Ordinal) ? "high10.mp4" : "input.mp4") : source;
+                var audio = source.EndsWith("separate-audio", StringComparison.Ordinal) ? Path.Combine(directory, "audio.m4a") : null;
                 var localMkv = Path.GetExtension(path) == ".mkv";
                 var subs = localMkv ? Array.Empty<string>() : [Path.Combine(directory, "dialogue.ass")];
                 var intent = new PlaybackIntentDto(PlaybackKind.Native, null, null, path, audio, null, [], [], null);
@@ -171,8 +194,22 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
                 await engine.LoadAsync(intent, subs, timeout.Token);
                 await WaitUntilAsync(() => failure is not null || (engine.Position > 0.2 && engine.Duration > 3), "Playback clock/duration failed");
+                try { await WaitUntilAsync(() =>
+                {
+                    if (failure is not null) return true;
+                    try { return !engine.IsBuffering && video.MediaPlayer.PlaybackSession.NaturalVideoWidth > 0; }
+                    catch (COMException) { return false; }
+                }, "Decoded video did not become ready", 450); }
+                catch
+                {
+                    _results.Add($"DECODER STATE software={engine.IsSoftwareDecoding} changing={engine.IsChangingSource} buffering={engine.IsBuffering} state={video.MediaPlayer.PlaybackSession.PlaybackState} clock={engine.Position} paused={engine.IsPaused}");
+                    throw;
+                }
                 Check(failure is null, failure ?? "");
-                if (source == "separate-audio")
+                if (source.Contains("high10", StringComparison.OrdinalIgnoreCase))
+                    Check(engine.IsSoftwareDecoding, "10-bit H.264 did not use the software decoder");
+                _results.Add(engine.IsSoftwareDecoding ? "DECODER software" : "DECODER Windows");
+                if (source.EndsWith("separate-audio", StringComparison.Ordinal))
                 {
                     var audioPlayer = (Windows.Media.Playback.MediaPlayer)typeof(WindowsMediaEngine)
                         .GetField("_audio", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(engine)!;
@@ -233,7 +270,7 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                 Check(audioTracks.Length > 0, "Audio tracks missing");
                 engine.SetAudioTrack(audioTracks[^1].Id);
                 Check(engine.AudioTrack == audioTracks[^1].Id, "Audio selection failed");
-                if (engine.IsAdaptive)
+                if (engine.IsAdaptive || engine.ReadVideoTracks().Length > 1)
                 {
                     var tracks = engine.ReadVideoTracks();
                     Check(tracks.All(t => t.Height > 0), "Adaptive resolution metadata missing: " + JsonSerializer.Serialize(tracks));
@@ -260,7 +297,7 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                         await change;
                         await WaitUntilAsync(() => !engine.IsSeeking, "Quality/seek operation did not finish");
                         Check(engine.IsPaused && engine.AudioTrack == audioBefore && engine.SubTrack == subBefore, "Quality switch changed pause/audio/subtitles");
-                        Check(Math.Abs(engine.Position - positionBefore) < 0.5, "Quality switch lost playback position");
+                        Check(Math.Abs(engine.Position - positionBefore) < 0.5, $"Quality switch lost playback position: expected {positionBefore}, actual {engine.Position}, duration {engine.Duration}");
                         // HLS can display a separate I-frame rendition while paused. Check normal decoded frames after resume.
                         engine.TogglePause();
                         try
@@ -278,8 +315,11 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                     }
                     engine.TogglePause();
                     Check(!engine.IsAutomaticQuality, "Manual quality failed");
-                    engine.SetAutomaticQuality();
-                    Check(engine.IsAutomaticQuality, "Automatic quality failed");
+                    if (engine.IsAdaptive)
+                    {
+                        engine.SetAutomaticQuality();
+                        Check(engine.IsAutomaticQuality, "Automatic quality failed");
+                    }
                 }
                 engine.TogglePause();
                 await WaitUntilAsync(() => engine.IsPaused, "Pause state failed");
@@ -315,10 +355,11 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                     _results.Add($"BUFFER DIAG buffer={engine.IsBuffering} pause={engine.IsPaused} seek={engine.IsSeeking} clock={engine.Position} decoded={video.MediaPlayer.PlaybackSession.Position} state={video.MediaPlayer.PlaybackSession.PlaybackState} timeline={video.MediaPlayer.TimelineController.State}");
                     throw;
                 }
+                Check(failure is null, failure ?? "");
                 var before = overlay.Width;
                 _window!.AppWindow.Resize(new Windows.Graphics.SizeInt32(480, 320));
-                await Task.Delay(350);
-                Check(overlay.Width < before || before < 480, "Subtitle resizing failed");
+                await WaitUntilAsync(() => overlay.Width < before || before < 480,
+                    $"Subtitle resizing failed (previous width {before})");
                 _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(800, 500));
                 if (source == sources[0])
                 {
@@ -356,7 +397,11 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
                     Check(((Grid)host.FindName("ErrorHost")).Visibility == Visibility.Collapsed,
                         ((Anibel.App.Views.EmptyState)host.FindName("ErrorState")).Message);
                     var player = ((MediaPlayerElement)host.FindName("VideoPanel")).MediaPlayer;
-                    Check(player.PlaybackSession.NaturalVideoWidth > 0, "PlayerHost video is missing");
+                    await WaitUntilAsync(() =>
+                    {
+                        try { return !((ProgressRing)host.FindName("BusyRing")).IsActive && player.PlaybackSession.NaturalVideoWidth > 0; }
+                        catch (COMException) { return false; }
+                    }, "PlayerHost video is missing", 450);
                     // Inject native buffering notifications through the actual engine/host path.
                     // The timeline and visible loader must follow buffering, not play intent.
                     var controller = (PlayerController)typeof(PlayerHost).GetField("_controller", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host)!;
@@ -424,6 +469,7 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
     private async Task CheckShellAsync(ICoreClient core)
     {
         var settings = new Anibel.App.Services.SettingsService();
+        var updateSource = new RestartTestSource();
         using var services = new ServiceCollection()
             .AddSingleton(settings).AddSingleton(core)
             .AddSingleton<Anibel.App.Services.SearchHistory>()
@@ -435,7 +481,7 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
             .AddTransient<Anibel.App.ViewModels.MediaDetailsViewModel>()
             .AddTransient<Anibel.App.ViewModels.ProfileViewModel>()
             .AddTransient<Anibel.App.ViewModels.ProfileListViewModel>()
-            .AddSingleton<Anibel.App.Services.IReleaseUpdateSource, Anibel.App.Services.ReleaseUpdateSource>()
+            .AddSingleton<Anibel.App.Services.IReleaseUpdateSource>(updateSource)
             .AddSingleton<Anibel.App.Services.AppUpdateService>()
             .AddSingleton<Anibel.App.Services.DownloadService>()
             .AddTransient<Anibel.App.ViewModels.DownloadsViewModel>()
@@ -450,6 +496,16 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         _results.Add($"STARTUP shell loaded {shellStart.Elapsed.TotalMilliseconds:F0} ms; process {DateTime.Now.Subtract(System.Diagnostics.Process.GetCurrentProcess().StartTime).TotalMilliseconds:F0} ms");
         await Task.Delay(500);
         var root = (Grid)shell.Content;
+        var notice = (InfoBar)root.FindName("UpdateNotice");
+        notice.UpdateLayout();
+        var noticeOrigin = notice.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+        Check(notice.IsOpen && notice.ActualWidth <= 440 && notice.ActualWidth > 0,
+            "Update notice is not a compact card");
+        Check(Math.Abs(root.ActualWidth - noticeOrigin.X - notice.ActualWidth - 16) < 2
+            && Math.Abs(root.ActualHeight - noticeOrigin.Y - notice.ActualHeight - 16) < 2,
+            "Update notice is not anchored bottom-right");
+        notice.IsOpen = false;
+        _results.Add("PASS bottom-right update notification");
         var solid = (Border)root.FindName("SolidBackground");
         var search = (AutoSuggestBox)root.FindName("GlobalSearch");
         var account = (Button)root.FindName("AccountButton");
@@ -549,6 +605,15 @@ internal sealed class NativePlaybackSmoke(Application application, string direct
         Check(await browser.CoreWebView2.ExecuteScriptAsync("1+1") == "2", "WebView2 script failed");
         browser.Close();
         _results.Add("PASS page construction, chapter template, and WebView2");
-        shell.Close();
+        var closed = false;
+        shell.Closed += (_, _) => closed = true;
+        updateSource.FailApply = true;
+        try { await shell.RestartForUpdateAsync(); throw new Exception("Updater failure was hidden"); }
+        catch (InvalidOperationException ex) when (ex.Message == "Test updater start failure") { }
+        Check(!closed && updateSource.ApplyCalls == 1, "Failed update silently closed the window");
+        updateSource.FailApply = false;
+        await shell.RestartForUpdateAsync();
+        Check(closed && updateSource.ApplyCalls == 2, "Restart closed without invoking the updater");
+        _results.Add("PASS update restart invokes updater before close and reports launch failure");
     }
 }

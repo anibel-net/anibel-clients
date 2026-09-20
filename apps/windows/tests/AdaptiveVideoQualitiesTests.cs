@@ -46,4 +46,47 @@ public class AdaptiveVideoQualitiesTests
     [InlineData("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000,RESOLUTION=1920x999999999999")]
     public void Invalid_metadata_does_not_invent_a_resolution(string manifest)
         => Assert.Empty(AdaptiveVideoQualities.Parse(manifest));
+    [Fact]
+    public void Software_hls_keeps_audio_and_makes_relative_addresses_absolute()
+    {
+        var selected = AdaptiveVideoQualities.Select("""
+            #EXTM3U
+            #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="dub",URI="audio/dub.m3u8"
+            #EXT-X-STREAM-INF:BANDWIDTH=9000,RESOLUTION=1920x1080,AUDIO="dub"
+            high.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=3000,RESOLUTION=640x360,AUDIO="dub"
+            low.m3u8
+            #EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=500,URI="iframe.m3u8"
+            """, new Uri("https://example.test/video/master.m3u8"), 3000);
+        Assert.Single(AdaptiveVideoQualities.Parse(selected));
+        Assert.Contains("https://example.test/video/audio/dub.m3u8", selected);
+        Assert.Contains("https://example.test/video/low.m3u8", selected);
+        Assert.DoesNotContain("high.m3u8", selected);
+        Assert.DoesNotContain("iframe", selected);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("<BaseURL>./</BaseURL>")]
+    public void Software_dash_keeps_audio_and_segment_templates(string baseUrl)
+    {
+        var selected = AdaptiveVideoQualities.Select($"""
+            <MPD xmlns="urn:mpeg:dash:schema:mpd:2011">{baseUrl}<Period>
+            <AdaptationSet mimeType="video/mp4"><SegmentTemplate media="$RepresentationID$/$Number$.m4s" />
+              <Representation id="high" bandwidth="9000" width="1920" height="1080" />
+              <Representation id="low" bandwidth="3000" width="640" height="360" />
+            </AdaptationSet>
+            <AdaptationSet mimeType="audio/mp4"><Representation id="dub" bandwidth="128000" /></AdaptationSet>
+            </Period></MPD>
+            """, new Uri("https://example.test/video/manifest.mpd"), 3000);
+        Assert.Single(AdaptiveVideoQualities.Parse(selected));
+        Assert.Contains("https://example.test/video/", selected);
+        Assert.Contains("$RepresentationID$/$Number$.m4s", selected);
+        Assert.Contains("id=\"dub\"", selected);
+        Assert.DoesNotContain("id=\"high\"", selected);
+    }
+
+    [Fact]
+    public void Software_selection_rejects_unknown_bitrate()
+        => Assert.Throws<ArgumentOutOfRangeException>(() => AdaptiveVideoQualities.Select("#EXTM3U", new Uri("https://example.test/master.m3u8"), 1));
 }

@@ -75,11 +75,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <InfoBar x:Name="StatusBar" Grid.Row="0" Severity="Error" IsClosable="True">
-            <InfoBar.ActionButton>
-                <Button Content="Скапіяваць" Click="OnCopyStatusClick" />
-            </InfoBar.ActionButton>
-        </InfoBar>
+
         <local:EmptyState x:Name="PageError" Grid.Row="0" Grid.RowSpan="3"
                           Title="Прабачце!"
                           Glyph="&#xE7BA;"
@@ -459,5 +455,11 @@
                 </Grid>
             </PivotItem>
         </Pivot>
+        <InfoBar x:Name="StatusBar" Grid.Row="0" Grid.RowSpan="3"
+                 HorizontalAlignment="Right" VerticalAlignment="Bottom" MaxWidth="440" Margin="0,0,0,16" Severity="Error" IsClosable="True">
+            <InfoBar.ActionButton>
+                <Button Content="Скапіяваць" Click="OnCopyStatusClick" />
+            </InfoBar.ActionButton>
+        </InfoBar>
     </Grid>
 </Page>

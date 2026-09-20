@@ -10,7 +10,7 @@ public interface IReleaseUpdateSource
     string? PendingVersion { get; }
     Task<string?> CheckAsync();
     Task DownloadAsync(Action<int> progress, CancellationToken ct);
-    void ApplyAndRestart();
+    void PrepareRestart();
 }
 
 public sealed class ReleaseUpdateSource : IReleaseUpdateSource
@@ -38,6 +38,6 @@ public sealed class ReleaseUpdateSource : IReleaseUpdateSource
     }
     public Task DownloadAsync(Action<int> progress, CancellationToken ct)
         => _manager!.DownloadUpdatesAsync(_available ?? throw new InvalidOperationException("No update selected."), progress, ct);
-    public void ApplyAndRestart()
-        => _manager!.ApplyUpdatesAndRestart(_manager.UpdatePendingRestart ?? throw new InvalidOperationException("No update is ready."));
+    public void PrepareRestart()
+        => _manager!.WaitExitThenApplyUpdates(_manager.UpdatePendingRestart ?? throw new InvalidOperationException("No update is ready."), restart: true);
 }

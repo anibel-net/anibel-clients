@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $bash = Join-Path $MsysRoot 'usr/bin/bash.exe'
 if (-not (Test-Path -LiteralPath $bash)) {
-    throw 'Install MSYS2 and its UCRT64 gcc, pkgconf, libxml2, zlib packages, plus make.'
+    throw 'Install MSYS2 and its UCRT64 gcc, pkgconf, libxml2, zlib, nasm packages, plus make.'
 }
 Push-Location $repoRoot
 try {

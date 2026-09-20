@@ -17,7 +17,7 @@ python -m http.server 18765 --bind 127.0.0.1 --directory artifacts/native-playba
 Run the smoke mode (enabled by default in Debug, absent from normal Release):
 
 ```powershell
-apps/windows/src/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/Anibel.Net.exe --native-playback-smoke artifacts/native-playback-test
+apps/windows/src/bin/x64/Debug/net10.0-windows10.0.22000.0/win-x64/Anibel.Net.exe --native-playback-smoke artifacts/native-playback-test
 ```
 
 The test opens a window and writes `artifacts/native-playback-test/result.txt`.
@@ -64,3 +64,9 @@ For optimized/untrimmed comparisons, use separate `IntermediateOutputPath` and
 publish folders for each configuration to avoid stale dependency manifests.
 For example, use `-p:IntermediateOutputPath=obj/optimized-smoke/` with
 `-p:OptimizeDistribution=true`, and `obj/baseline-smoke/` with `false`.
+
+High 10 H.264 fixtures check automatic software fallback for MP4, HLS, DASH,
+and separate audio. Ordinary H.264 stays on Windows decoders. Software quality
+checks use fresh single-quality manifests and keep audio, subtitles and seek state.
+The shell check also verifies bottom-right update notices and the restart button
+with a fake updater (including a launch failure); it does not apply an installed update.

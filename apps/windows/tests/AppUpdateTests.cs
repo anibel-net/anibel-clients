@@ -13,7 +13,7 @@ public class AppUpdateTests
         public TaskCompletionSource? Gate;
         public async Task<string?> CheckAsync() { Checks++; if (Gate is not null) await Gate.Task; if (Fail) throw new IOException("offline"); return Available; }
         public Task DownloadAsync(Action<int> progress, CancellationToken ct) { Downloads++; progress(100); PendingVersion = Available; return Task.CompletedTask; }
-        public void ApplyAndRestart() { Applies++; }
+        public void PrepareRestart() { Applies++; }
     }
     [Fact]
     public async Task Downloads_once_and_waits_for_explicit_restart()
@@ -22,7 +22,7 @@ public class AppUpdateTests
         await updates.CheckAsync(); await updates.CheckAsync();
         Assert.Equal(AppUpdateState.Ready, updates.State);
         Assert.Equal(1, source.Downloads); Assert.Equal(0, source.Applies);
-        updates.ApplyAndRestart(); Assert.Equal(1, source.Applies);
+        updates.PrepareRestart(); Assert.Equal(1, source.Applies);
     }
     [Fact]
     public async Task Concurrent_checks_share_one_operation()
@@ -46,7 +46,7 @@ public class AppUpdateTests
         var source = new Source { IsInstalled = false }; using var updates = new AppUpdateService(source);
         updates.Start(); await updates.CheckAsync(); await updates.StopAsync();
         Assert.Equal(0, source.Checks); Assert.False(updates.CanCheck);
-        Assert.Throws<InvalidOperationException>(() => updates.ApplyAndRestart());
+        Assert.Throws<InvalidOperationException>(() => updates.PrepareRestart());
     }
     [Fact]
     public async Task Pending_update_survives_restart_without_automatic_install()

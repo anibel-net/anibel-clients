@@ -1,4 +1,5 @@
 using Anibel.App.Core;
+using FFmpegInteropX;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -27,6 +28,11 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     private readonly bool _preferDub;
     private readonly List<MediaSource> _sources = [];
     private MediaPlayer? _audio;
+    private FFmpegMediaSource? _softwareSource;
+    private string? _softwareManifestPath;
+    private string? _videoPath;
+    private Task _recoveryTask = Task.CompletedTask;
+    internal bool IsSoftwareDecoding => _softwareSource is not null;
     private MediaPlaybackItem? _item, _audioItem;
     private AdaptiveMediaSource? _adaptive;
     private (byte[] Data, Uri Uri, string ContentType)? _manifest;
@@ -37,6 +43,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     // Timeline.State changes asynchronously. Toggle the user's intent, not its delayed acknowledgement.
     private bool _paused = true;
     private double? _seekTarget;
+    private double _duration;
     private bool _changingSource;
     private readonly HashSet<MediaPlaybackSession> _bufferingSessions = [];
     public Task CleanupCompleted { get; private set; } = Task.CompletedTask;
@@ -81,7 +88,21 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         || _audio?.PlaybackSession.PlaybackState is MediaPlaybackState.Opening or MediaPlaybackState.Buffering;
     public bool IsSeeking => _seekTarget.HasValue;
     internal bool IsChangingSource => _changingSource;
-    public double Duration => _player.PlaybackSession.NaturalDuration.TotalSeconds;
+    public double Duration
+    {
+        get
+        {
+            // Keep the timeline range while a failed or replaced source has no metadata.
+            if (_softwareSource is not null) return _softwareSource.Duration.TotalSeconds;
+            try
+            {
+                var duration = _player.PlaybackSession.NaturalDuration.TotalSeconds;
+                if (duration > 0) _duration = duration;
+            }
+            catch (System.Runtime.InteropServices.COMException) { /* MediaFailed owns the error. */ }
+            return _duration;
+        }
+    }
     public double Volume => (_audio ?? _player).Volume * 100;
     public bool IsMuted => (_audio ?? _player).IsMuted;
     public long SubTrack => _subtitle;
@@ -110,14 +131,12 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         try
         {
             var source = intent.VideoSrc ?? throw new InvalidOperationException("No video source.");
+            _videoPath = source;
             await _assets.PrepareAsync(intent, subPaths, _configDirectory, ct);
             ct.ThrowIfCancellationRequested();
             if (_disposed) return;
             _subtitles = new AssRenderer(_overlay, _assets.FontsDirectory);
-            _item = new MediaPlaybackItem(await CreateSourceAsync(source, true, ct));
-            if (_disposed) return;
-            var videoOpened = WaitForOpenAsync(_player, ct);
-            _player.Source = _item;
+            var videoOpened = OpenVideoAsync(source, ct);
             Task audioOpened = Task.CompletedTask;
             if (!string.IsNullOrWhiteSpace(intent.AudioSrc) && intent.AudioSrc != source)
             {
@@ -159,6 +178,118 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
             if (!_disposed) Error?.Invoke(ex.Message);
             throw;
         }
+    }
+
+    private async Task OpenVideoAsync(string path, CancellationToken ct)
+    {
+        _item = new MediaPlaybackItem(await CreateSourceAsync(path, true, ct));
+        var opened = WaitForOpenAsync(_player, ct);
+        _player.Source = _item;
+        try { await opened; }
+        catch (PlaybackOpenException ex) when (CanDecodeInSoftware(ex.Error))
+        {
+            await OpenSoftwareVideoAsync(path, ct);
+        }
+    }
+
+    private static bool CanDecodeInSoftware(MediaPlayerError error)
+        => error is MediaPlayerError.DecodingError or MediaPlayerError.SourceNotSupported;
+
+    private async Task OpenSoftwareVideoAsync(string path, CancellationToken ct, uint? bitrate = null)
+    {
+        Anibel.App.Services.Diag.Log("Software decoder: opening source");
+        var config = new MediaSourceConfig();
+        config.Video.VideoDecoderMode = VideoDecoderMode.ForceFFmpegSoftwareDecoder;
+        config.General.FastSeekSmartStreamSwitching = false;
+        config.Subtitles.UseEmbeddedSubtitleFonts = false; // libass owns extracted fonts.
+        config.FFmpegOptions["rw_timeout"] = "15000000";
+        config.FFmpegOptions["protocol_whitelist"] = "file,http,https,tcp,tls,crypto,data";
+        string? manifestPath = null;
+        FFmpegMediaSource decoder;
+        // Await the native factory to completion so cancellation cannot lose its native handle.
+        // Network reads are bounded by rw_timeout; close waits for this operation.
+        ct.ThrowIfCancellationRequested();
+        try
+        {
+            if (_manifest is { } manifest && _videoSizes.Count > 0)
+            {
+                var selected = bitrate ?? _videoSizes.OrderByDescending(t => t.Value.Height)
+                    .ThenByDescending(t => t.Value.Width).ThenByDescending(t => t.Key).First().Key;
+                var text = AdaptiveVideoQualities.Select(System.Text.Encoding.UTF8.GetString(manifest.Data), manifest.Uri, selected);
+                var extension = manifest.ContentType == "application/dash+xml" ? ".mpd" : ".m3u8";
+                manifestPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Anibel-playback-" + Guid.NewGuid().ToString("N") + extension);
+                await System.IO.File.WriteAllTextAsync(manifestPath, text, ct);
+                decoder = await FFmpegMediaSource.CreateFromFileAsync(manifestPath, config);
+            }
+            else decoder = await (System.IO.File.Exists(path)
+                ? FFmpegMediaSource.CreateFromFileAsync(StoragePath(path), config)
+                : FFmpegMediaSource.CreateFromUriAsync(path, config));
+        }
+        catch { if (manifestPath is not null) System.IO.File.Delete(manifestPath); throw; }
+        if (_disposed || ct.IsCancellationRequested)
+        {
+            decoder.Dispose();
+            if (manifestPath is not null) System.IO.File.Delete(manifestPath);
+            ct.ThrowIfCancellationRequested();
+            throw new ObjectDisposedException(nameof(WindowsMediaEngine));
+        }
+        Anibel.App.Services.Diag.Log("Software decoder: source ready");
+        _player.Source = null;
+        if (_item is not null)
+        {
+            _sources.Remove(_item.Source);
+            _item.Source.Dispose();
+        }
+        _softwareSource?.Dispose();
+        if (_softwareManifestPath is not null) System.IO.File.Delete(_softwareManifestPath);
+        _softwareSource = decoder;
+        _softwareManifestPath = manifestPath;
+        _adaptive = null;
+        _bufferingSessions.Remove(_player.PlaybackSession);
+        _item = decoder.CreateMediaPlaybackItem();
+        decoder.PlaybackSession = _player.PlaybackSession;
+        var opened = WaitForOpenAsync(_player, ct);
+        _player.Source = _item;
+        await opened;
+        Anibel.App.Services.Diag.Log("Software decoder: player ready");
+
+    }
+
+    private async Task RecoverVideoAsync()
+    {
+        _changingSource = true;
+        NotifyBuffering();
+        try
+        {
+            await _qualitySwitch.WaitAsync(_lifetime.Token);
+            try
+            {
+                _changingSource = true;
+                _seekTarget = Position;
+                var audio = AudioTrack;
+                var subtitle = SubTrack;
+                await OpenSoftwareVideoAsync(_videoPath!, _lifetime.Token);
+                if (_disposed) return;
+                SetAudioTrack(audio);
+                SetSubTrack(subtitle);
+                _changingSource = false;
+                StartPendingSeek();
+            }
+            finally { _qualitySwitch.Release(); }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { if (!_disposed) ReportFailure(ex.Message); }
+        finally
+        {
+            _changingSource = false;
+            if (!_disposed && IsInitialized) NotifyBuffering();
+        }
+    }
+
+    private sealed class PlaybackOpenException(MediaPlayerFailedEventArgs args)
+        : InvalidOperationException(MediaError(args), args.ExtendedErrorCode)
+    {
+        public MediaPlayerError Error { get; } = args.Error;
     }
 
     private async Task<MediaSource> CreateSourceAsync(string path, bool video, CancellationToken ct)
@@ -220,7 +351,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         void Opened(MediaPlayer _, object args) => completion.TrySetResult();
-        void Failed(MediaPlayer _, MediaPlayerFailedEventArgs args) => completion.TrySetException(new InvalidOperationException(MediaError(args), args.ExtendedErrorCode));
+        void Failed(MediaPlayer _, MediaPlayerFailedEventArgs args) => completion.TrySetException(new PlaybackOpenException(args));
         player.MediaOpened += Opened;
         player.MediaFailed += Failed;
         try { await completion.Task.WaitAsync(TimeSpan.FromSeconds(45), ct); }
@@ -248,6 +379,16 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     }
     public VideoTrackInfo[] ReadVideoTracks()
     {
+        if (_softwareSource is not null && _manifest is not null && _videoSizes.Count > 0)
+        {
+            var current = _softwareSource.CurrentVideoStream;
+            return _videoSizes.Select(t => new VideoTrackInfo(t.Key, t.Value.Width, t.Value.Height, t.Key, "", false,
+                t.Value.Width == current.PixelWidth && t.Value.Height == current.PixelHeight)).ToArray();
+        }
+        if (_softwareSource is not null)
+            return _softwareSource.VideoStreams.Select((t, i) => new VideoTrackInfo(i + 1,
+                checked((uint)t.PixelWidth), checked((uint)t.PixelHeight), t.Bitrate, "", false,
+                _item?.VideoTracks.SelectedIndex == i)).ToArray();
         if (IsAdaptive)
             return _adaptive!.AvailableBitrates.Where(b => b > 0).Distinct().Select(b =>
             {
@@ -273,6 +414,39 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     }
     private async Task ChangeVideoTrackAsync(long id)
     {
+        if (_softwareSource is not null)
+        {
+            if (_manifest is null || _videoSizes.Count == 0)
+            {
+                if (id < 1 || id > _item!.VideoTracks.Count) throw new ArgumentOutOfRangeException(nameof(id));
+                _seekTarget = Position;
+                _item.VideoTracks.SelectedIndex = checked((int)id - 1);
+                StartPendingSeek();
+                return;
+            }
+            if (!_videoSizes.ContainsKey(checked((uint)id))) throw new ArgumentOutOfRangeException(nameof(id));
+            await _qualitySwitch.WaitAsync(_lifetime.Token);
+            try
+            {
+                if (ReadVideoTracks().Any(t => t.Id == id && t.Selected)) return;
+                _changingSource = true;
+                _seekTarget = Position;
+                var audio = AudioTrack;
+                var subtitle = SubTrack;
+                NotifyBuffering();
+                await OpenSoftwareVideoAsync(_videoPath!, _lifetime.Token, checked((uint)id));
+                _lifetime.Token.ThrowIfCancellationRequested();
+                SetAudioTrack(audio);
+                SetSubTrack(subtitle);
+            }
+            finally
+            {
+                _changingSource = false;
+                if (!_disposed) { StartPendingSeek(); NotifyBuffering(); }
+                _qualitySwitch.Release();
+            }
+            return;
+        }
         if (_adaptive is null || _manifest is not { } manifest) return;
         var bitrate = checked((uint)id);
         if (!_adaptive.AvailableBitrates.Contains(bitrate)) throw new ArgumentOutOfRangeException(nameof(id));
@@ -432,7 +606,15 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     private void OnRendering(object? sender, object args) { if (!_disposed && IsInitialized) DrawSubtitles(); }
     private void DrawSubtitles()
     {
-        try { _subtitles?.Render(ActualPosition, _surface.ActualWidth, _surface.ActualHeight, _player.PlaybackSession.NaturalVideoWidth, _player.PlaybackSession.NaturalVideoHeight, _overlay.XamlRoot?.RasterizationScale ?? 1); }
+        if (_changingSource) return;
+        uint width, height;
+        try
+        {
+            width = _softwareSource is not null ? checked((uint)_softwareSource.CurrentVideoStream.PixelWidth) : _player.PlaybackSession.NaturalVideoWidth;
+            height = _softwareSource is not null ? checked((uint)_softwareSource.CurrentVideoStream.PixelHeight) : _player.PlaybackSession.NaturalVideoHeight;
+        }
+        catch (System.Runtime.InteropServices.COMException) { return; } // MediaFailed owns decoder errors.
+        try { _subtitles?.Render(ActualPosition, _surface.ActualWidth, _surface.ActualHeight, width, height, _overlay.XamlRoot?.RasterizationScale ?? 1); }
         catch (Exception ex) { _subtitles?.Load(null); Error?.Invoke($"Subtitle rendering failed: {ex.Message}"); }
     }
     private static string MediaError(MediaPlayerFailedEventArgs args)
@@ -440,18 +622,33 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
     {
         var message = MediaError(args);
-        Anibel.App.Services.Diag.Log($"Native playback failed: {message}");
-        OnUi(() =>
-        {
-            IsInitialized = false;
-            _paused = true;
-            _seekTarget = null;
-            _changingSource = false;
-            _bufferingSessions.Clear();
-            _timeline.Pause();
-            BufferingChanged?.Invoke(false);
-            Error?.Invoke(message);
-        });
+        Anibel.App.Services.Diag.Log($"Native {(sender.Equals(_player) ? "video" : "audio")} playback failed: {message}; initialized={IsInitialized}, switching={_changingSource}");
+        var failedItem = sender.Equals(_player) ? _item : _audioItem;
+        OnUi(() => _ = HandleMediaFailureAsync(sender, failedItem, args.Error, message));
+    }
+    private async Task HandleMediaFailureAsync(MediaPlayer sender, MediaPlaybackItem? failedItem,
+        MediaPlayerError error, string message)
+    {
+        // MediaOpened can precede a decoder failure while track selection is still loading.
+        // Wait for that load, then ignore errors from any source it has already replaced.
+        try { await _loadTask; } catch { return; }
+        if (_disposed || !IsInitialized || _changingSource || !_recoveryTask.IsCompleted
+            || !ReferenceEquals(failedItem, sender.Equals(_player) ? _item : _audioItem)) return;
+        if (sender.Equals(_player) && _softwareSource is null
+            && _recoveryTask.IsCompleted && CanDecodeInSoftware(error))
+            await (_recoveryTask = RecoverVideoAsync());
+        else ReportFailure(message);
+    }
+    private void ReportFailure(string message)
+    {
+        IsInitialized = false;
+        _paused = true;
+        _seekTarget = null;
+        _changingSource = false;
+        _bufferingSessions.Clear();
+        _timeline.Pause();
+        BufferingChanged?.Invoke(false);
+        Error?.Invoke(message);
     }
     private void OnEnded(MediaTimelineController sender, object args) => OnUi(() =>
     {
@@ -479,6 +676,10 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
         _player.Dispose();
         foreach (var source in _sources) source.Dispose();
         _sources.Clear();
+        _softwareSource?.Dispose();
+        _softwareSource = null;
+        if (_softwareManifestPath is not null) System.IO.File.Delete(_softwareManifestPath);
+        _softwareManifestPath = null;
         _subtitles?.Dispose();
         CleanupCompleted = DisposeAssetsAfterLoadAsync();
     }
@@ -487,6 +688,7 @@ public sealed class WindowsMediaEngine : IPlayerEngine, IPlaybackControls
     {
         try { await _loadTask; } catch { /* Load failures have already been reported. */ }
         try { await Task.WhenAll(_qualityTasks.ToArray()); } catch { /* Cancelled during close. */ }
+        try { await _recoveryTask; } catch { /* Recovery failure was reported. */ }
         _assets.Dispose();
         _lifetime.Dispose();
     }

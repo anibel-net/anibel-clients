@@ -22,7 +22,7 @@ public sealed partial class MainWindow : Window,
     IRecipient<SessionChangedMessage>
 {
     public AppUpdateService Updates { get; }
-    private bool _restartForUpdate;
+    private ClosePhase _closePhase;
 
     public async Task RestartForUpdateAsync()
     {
@@ -37,8 +37,7 @@ public sealed partial class MainWindow : Window,
             if (instances.Length > 1) throw new InvalidOperationException("Спачатку закрыйце іншыя вокны Anibel.Net.");
         }
         finally { foreach (var instance in instances) instance.Dispose(); }
-        _restartForUpdate = true;
-        Close();
+        await CloseAsync(restartForUpdate: true);
     }
 
     private void OnUpdateDetailsClick(object sender, RoutedEventArgs e)
@@ -158,24 +157,12 @@ public sealed partial class MainWindow : Window,
             RefreshAccount();
             LayoutTitleBar();
         };
-        var closePhase = ClosePhase.Active;
         AppWindow.Closing += async (_, e) =>
         {
-            if (closePhase == ClosePhase.Complete) return;
+            if (_closePhase == ClosePhase.Complete) return;
             e.Cancel = true;
-            if (closePhase == ClosePhase.Waiting) return;
-            closePhase = ClosePhase.Waiting;
-            try
-            {
-                if (RootFrame.Content is MainPage page) await page.ClosePlaybackAsync();
-                if (Application.Current is App app) await app.StopAsync();
-                if (_restartForUpdate)
-                {
-                    try { Updates.ApplyAndRestart(); }
-                    catch (Exception ex) { Diag.Log($"Could not apply update: {ex}"); }
-                }
-            }
-            finally { closePhase = ClosePhase.Complete; DispatcherQueue.TryEnqueue(Close); }
+            try { await CloseAsync(); }
+            catch (Exception ex) { Diag.Log($"Could not close app: {ex}"); }
         };
         Closed += (_, _) =>
         {
@@ -186,6 +173,27 @@ public sealed partial class MainWindow : Window,
         };
 
         RootFrame.Navigate(typeof(MainPage));
+    }
+
+    private async Task CloseAsync(bool restartForUpdate = false)
+    {
+        if (_closePhase != ClosePhase.Active) return;
+        _closePhase = ClosePhase.Waiting;
+        try
+        {
+            if (RootFrame.Content is MainPage page) await page.ClosePlaybackAsync();
+            // Window.Close() does not raise AppWindow.Closing. Start the updater here;
+            // it waits for this process to exit. A launch failure leaves services running.
+            if (restartForUpdate) Updates.PrepareRestart();
+            if (Application.Current is App app) await app.StopAsync();
+            _closePhase = ClosePhase.Complete;
+            Close();
+        }
+        catch
+        {
+            _closePhase = ClosePhase.Active;
+            throw; // Settings must show the failure instead of silently exiting.
+        }
     }
 
     public void Receive(SessionChangedMessage message) => RefreshAccount();

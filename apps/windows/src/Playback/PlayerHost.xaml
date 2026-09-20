@@ -200,7 +200,8 @@
                 </Grid>
             </Grid>
 
-            <InfoBar x:Name="DownloadNotice" Grid.Row="1" Margin="16" VerticalAlignment="Top"
+            <InfoBar x:Name="DownloadNotice" Grid.Row="1" Margin="16,16,16,96" VerticalAlignment="Bottom"
+                     HorizontalAlignment="Right" MaxWidth="440"
                      IsOpen="False" IsClosable="True" />
             <Grid x:Name="MiniHover" Grid.RowSpan="3" Background="#66000000" Visibility="Collapsed">
                 <Button HorizontalAlignment="Center" VerticalAlignment="Center"

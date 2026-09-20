@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run with MSYS2 UCRT64 bash. Packages: gcc, pkgconf, libxml2, zlib, make.
+# Run with MSYS2 UCRT64 bash. Packages: gcc, pkgconf, libxml2, zlib, nasm, make.
 set -euo pipefail
 export PATH="/ucrt64/bin:/usr/bin:$PATH"
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +21,7 @@ cd build
     --prefix="$work/install" --target-os=mingw32 --arch=x86_64 \
     --enable-shared --disable-static --enable-small --disable-debug \
     --disable-doc --disable-autodetect --disable-everything \
-    --disable-ffplay --disable-avdevice --disable-postproc --disable-x86asm \
+    --disable-ffplay --disable-avdevice --disable-postproc \
     --enable-schannel --enable-libxml2 --enable-zlib \
     --enable-protocol=file,http,https,tcp,tls,crypto,data \
     --enable-demuxer=hls,dash,mov,mpegts,matroska,aac,mp3,flac,ogg,wav,ass,srt,webvtt \
@@ -56,7 +56,7 @@ for package in libxml2 libiconv zlib libwinpthread; do
     cp -r "/ucrt64/share/licenses/$package/." "$runtime/licenses/$package/"
 done
 {
-    echo "FFmpeg $version, minimal shared build for Anibel MKV downloads."
+    echo "FFmpeg $version, minimal shared build for Anibel playback and MKV downloads."
     echo "Source: https://ffmpeg.org/releases/$archive"
     echo "Build recipe: build-ffmpeg-small.sh (included)."
     echo "MSYS2 dependencies and source packages: https://packages.msys2.org/"

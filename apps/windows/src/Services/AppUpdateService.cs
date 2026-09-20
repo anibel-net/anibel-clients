@@ -87,10 +87,10 @@ public sealed class AppUpdateService : ObservableObject, IDisposable
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Diag.Log($"Update failed: {ex}"); SetState(AppUpdateState.Failed); }
     }
-    public void ApplyAndRestart()
+    public void PrepareRestart()
     {
         if (!IsReady) throw new InvalidOperationException("No update is ready.");
-        _source.ApplyAndRestart();
+        _source.PrepareRestart();
     }
     public async Task StopAsync()
     {

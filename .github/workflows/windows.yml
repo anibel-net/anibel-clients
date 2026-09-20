@@ -49,6 +49,7 @@ jobs:
           install: >-
             make curl tar diffutils
             mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-nasm
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-libxml2
             mingw-w64-ucrt-x86_64-zlib

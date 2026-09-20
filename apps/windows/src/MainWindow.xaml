@@ -184,7 +184,8 @@
         </Grid>
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
-        <InfoBar Grid.Row="1" VerticalAlignment="Top" Margin="12" Severity="Informational"
+        <InfoBar x:Name="UpdateNotice" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                 MaxWidth="440" Margin="16" Severity="Informational"
                  IsOpen="{x:Bind Updates.IsReady, Mode=OneWay}" IsClosable="True"
                  Title="Даступнае абнаўленне" Message="{x:Bind Updates.StatusLabel, Mode=OneWay}">
             <InfoBar.ActionButton><Button Content="Падрабязней" Click="OnUpdateDetailsClick" /></InfoBar.ActionButton>

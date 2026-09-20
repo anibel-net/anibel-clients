@@ -7,7 +7,7 @@ namespace Anibel.App.Playback;
 
 internal static class AdaptiveVideoQualities
 {
-    // Metadata only: Windows still owns variant selection and segment downloads.
+    // Read resolution metadata without downloading media segments.
     internal static Dictionary<uint, (uint Width, uint Height)> Parse(string manifest)
     {
         var result = new Dictionary<uint, (uint, uint)>();
@@ -50,5 +50,53 @@ internal static class AdaptiveVideoQualities
             catch (XmlException) { /* Missing metadata must not prevent Windows playback. */ }
         }
         return result;
+    }
+    // A software decoder receives one video rendition plus every audio/subtitle rendition.
+    // Absolute addresses keep segment resolution correct in the temporary local manifest.
+    internal static string Select(string manifest, Uri address, uint bitrate)
+    {
+        if (!Parse(manifest).ContainsKey(bitrate)) throw new ArgumentOutOfRangeException(nameof(bitrate));
+        if (manifest.TrimStart('\uFEFF', ' ', '\r', '\n').StartsWith("#EXTM3U", StringComparison.Ordinal))
+        {
+            var lines = new List<string>();
+            var skipUri = false;
+            foreach (var raw in manifest.Split('\n'))
+            {
+                var line = raw.TrimEnd('\r');
+                if (line.StartsWith("#EXT-X-I-FRAME-STREAM-INF:", StringComparison.Ordinal)) continue;
+                if (line.StartsWith("#EXT-X-STREAM-INF:", StringComparison.Ordinal))
+                {
+                    var value = Regex.Match(line, @"(?:[:,])\s*BANDWIDTH=([0-9]+)(?:,|$)").Groups[1].Value;
+                    skipUri = value != bitrate.ToString(CultureInfo.InvariantCulture);
+                    if (skipUri) continue;
+                }
+                else if (line.Length > 0 && line[0] != '#')
+                {
+                    if (skipUri) { skipUri = false; continue; }
+                    line = new Uri(address, line).AbsoluteUri;
+                }
+                line = Regex.Replace(line, "URI=\"([^\"]+)\"", m => "URI=\"" + new Uri(address, m.Groups[1].Value).AbsoluteUri + "\"");
+                lines.Add(line);
+            }
+            return string.Join("\n", lines);
+        }
+        using var reader = XmlReader.Create(new StringReader(manifest), new XmlReaderSettings
+        { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 2 * 1024 * 1024 });
+        var document = XDocument.Load(reader);
+        foreach (var representation in document.Descendants().Where(e => e.Name.LocalName == "Representation").ToArray())
+        {
+            var parent = representation.Parent;
+            var type = (string?)representation.Attribute("mimeType") ?? (string?)parent?.Attribute("mimeType")
+                ?? (string?)representation.Attribute("contentType") ?? (string?)parent?.Attribute("contentType");
+            var video = type is "video" || type?.StartsWith("video/", StringComparison.Ordinal) == true
+                || representation.Attribute("width") is not null || parent?.Attribute("width") is not null;
+            if (video && (string?)representation.Attribute("bandwidth") != bitrate.ToString(CultureInfo.InvariantCulture))
+                representation.Remove();
+        }
+        var root = document.Root!;
+        var bases = root.Elements().Where(e => e.Name.LocalName == "BaseURL").ToArray();
+        if (bases.Length == 0) root.AddFirst(new XElement(root.Name.Namespace + "BaseURL", new Uri(address, ".").AbsoluteUri));
+        else foreach (var element in bases) element.Value = new Uri(address, element.Value).AbsoluteUri;
+        return document.ToString(SaveOptions.DisableFormatting);
     }
 }

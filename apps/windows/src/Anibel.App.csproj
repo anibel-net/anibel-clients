@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <UpdateChannel Condition="'$(UpdateChannel)' == ''">win-x64</UpdateChannel>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>Anibel.App</RootNamespace>
     <AssemblyName>Anibel.Net</AssemblyName>
@@ -51,6 +51,8 @@
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
+    <Content Include="Licenses\*.txt" Link="licenses\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--
@@ -76,6 +78,10 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" Condition="'$(OptimizeDistribution)' == 'true'" />
     <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.6" Condition="'$(OptimizeDistribution)' == 'true'" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.6.1" />
+    <!-- Bridge only: reuse our minimal FFmpeg 7 runtime. -->
+    <PackageReference Include="FFmpegInteropX.Desktop.Lib" Version="2.0.0" />
+    <!-- The bridge includes its projection; do not run the legacy generator. -->
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.0.0" ExcludeAssets="all" PrivateAssets="all" />
     <PackageReference Include="Velopack" Version="1.2.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
@@ -130,6 +136,7 @@
     <!-- DTOs, anonymous JSON requests, generated messenger registrations and
          WinRT ABI helpers are reached dynamically. Keep them intact. -->
     <TrimmerRootAssembly Include="$(AssemblyName)" />
+    <TrimmerRootAssembly Include="FFmpegInteropX.DotNet" />
     <TrimmerRootAssembly Include="WinRT.Runtime" />
     <TrimmerRootAssembly Include="Microsoft.Windows.SDK.NET" />
     <TrimmerRootAssembly Include="Microsoft.WinUI" />

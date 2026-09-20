@@ -48,9 +48,24 @@ run('-i', 'input.mp4', '-map', '0:v', '-map', '0:a:0', '-vf', 'scale=320:180',
 (root / 'master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=320x180\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=640x360\nstream.m3u8\n', encoding='utf-8')
 run('-i', 'input.mp4', '-map', '0:v', '-map', '0:a:0', '-c', 'copy',
     '-seg_duration', '2', '-adaptation_sets', 'id=0,streams=v id=1,streams=a', 'stream.mpd')
+run('-i', 'input.mp4', '-map', '0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p10le',
+    '-g', '48', '-c:a', 'copy', 'high10.mp4')
+run('-i', 'high10.mp4', '-map', '0:v', '-map', '0:a:0', '-c', 'copy',
+    '-hls_time', '2', '-hls_list_size', '0', 'high10-stream.m3u8')
+run('-i', 'high10.mp4', '-map', '0:v', '-map', '0:a:0', '-vf', 'scale=320:180',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p10le', '-g', '48', '-c:a', 'copy',
+    '-hls_time', '2', '-hls_list_size', '0', 'high10-low.m3u8')
+(root / 'high10-master.m3u8').write_text('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=320x180\nhigh10-low.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=640x360\nhigh10-stream.m3u8\n', encoding='utf-8')
+run('-i', 'high10.mp4', '-map', '0:v', '-map', '0:v', '-map', '0:a:0',
+    '-c:v', 'libx264', '-filter:v:1', 'scale=320:180', '-pix_fmt', 'yuv420p10le',
+    '-g', '48', '-c:a', 'copy', '-seg_duration', '2',
+    '-init_seg_name', 'high10-init-$RepresentationID$.m4s',
+    '-media_seg_name', 'high10-chunk-$RepresentationID$-$Number%05d$.m4s',
+    '-adaptation_sets', 'id=0,streams=v id=1,streams=a', 'high10.mpd')
 (root / 'sources.json').write_text(json.dumps([
-    str(root / 'input.mp4'), f'http://127.0.0.1:{args.port}/stream.m3u8',
+    str(root / 'input.mp4'), str(root / 'high10.mp4'), f'http://127.0.0.1:{args.port}/stream.m3u8',
     f'http://127.0.0.1:{args.port}/master.m3u8', f'http://127.0.0.1:{args.port}/stream.mpd',
-    'separate-audio', str(root / 'download.mkv'), '\\\\?\\' + str(root / 'download.mkv').replace('/', '\\')
+    f'http://127.0.0.1:{args.port}/high10-master.m3u8', f'http://127.0.0.1:{args.port}/high10.mpd',
+    'separate-audio', 'high10-separate-audio', str(root / 'download.mkv'), '\\\\?\\' + str(root / 'download.mkv').replace('/', '\\')
 ]), encoding='utf-8')
 print(root)
