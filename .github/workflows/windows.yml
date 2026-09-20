@@ -67,12 +67,12 @@ jobs:
         run: dotnet build Anibel.App.csproj -c Release -p:Platform=x64
 
       - name: ViewModel tests
-        run: dotnet test tests/Anibel.App.Tests.csproj -c Release -p:Platform=x64
+        run: dotnet test tests/Anibel.App.Tests.csproj -c Release -p:Platform=x64 -p:PublishTrimmed=false
         working-directory: apps/windows
 
       - name: Publish native playback smoke build
         working-directory: .
-        run: dotnet publish apps/windows/src/Anibel.App.csproj -c Release -r win-x64 -p:Platform=x64 -p:EnablePlaybackSmoke=true -p:IntermediateOutputPath=obj/ci-smoke/ -o artifacts/playback-smoke
+        run: dotnet publish apps/windows/src/Anibel.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:EnablePlaybackSmoke=true -p:IntermediateOutputPath=obj/ci-smoke/ -o artifacts/playback-smoke
 
       - name: Generate local playback fixtures
         shell: msys2 {0}
