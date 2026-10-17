@@ -168,8 +168,8 @@ class MobileNavigationTest {
         compose.onNodeWithText(ui(R.string.copy_link)).assertIsDisplayed()
         compose.onNodeWithText(ui(R.string.open_browser)).assertIsDisplayed()
         androidx.test.espresso.Espresso.pressBack()
-        compose.waitUntil(45_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(ui(R.string.content_tab))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(ui(R.string.content_tab)).performScrollTo().assertIsDisplayed()
+        compose.waitUntil(45_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(ui(R.string.episodes))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(ui(R.string.episodes)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(ui(R.string.comments_tab)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("screen_Detail").performTouchInput { swipeUp() }
         compose.onNodeWithTag("detail_toolbar_title").assertIsDisplayed()

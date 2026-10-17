@@ -1,6 +1,7 @@
 package net.anibel.app
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import kotlinx.coroutines.launch
@@ -12,6 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -22,7 +26,6 @@ internal enum class DetailTab { About, Content, Comments, Related }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DetailScreen(args: JSONObject, isTv: Boolean, onBack: () -> Unit = {}) {
-    val navigator = LocalNavigator.current
     var revision by remember { mutableIntStateOf(0) }
     val media = coreData(CoreCommand.Media, args, revision)
     val scroll = rememberScrollState()
@@ -44,41 +47,31 @@ internal fun DetailScreen(args: JSONObject, isTv: Boolean, onBack: () -> Unit = 
         else if (!isTv) {
             val contentPosition = remember { BringIntoViewRequester() }
             val scope = rememberCoroutineScope()
-            Column(Modifier.fillMaxSize().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally,
+            Column(Modifier.fillMaxSize().verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                BoxWithConstraints(Modifier.widthIn(max = 1080.dp).fillMaxWidth()) {
-                    val about: @Composable () -> Unit = {
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val main: @Composable () -> Unit = {
                         DetailAbout(detail, false, { scope.launch { contentPosition.bringIntoView() }; Unit }) { revision++ }
-                    }
-                    val episodes: @Composable () -> Unit = {
                         Column(Modifier.bringIntoViewRequester(contentPosition), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(ui(R.string.content_tab), Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleLarge)
+                            SectionHeading(ui(when (CatalogTitle(detail).type) {
+                                "anime", "cinema" -> R.string.episodes
+                                "manga" -> R.string.chapters
+                                else -> R.string.content_tab
+                            }), Modifier.padding(horizontal = 24.dp))
                             DetailContent(detail, false)
                         }
+                        SectionHeading(ui(R.string.comments_tab), Modifier.padding(horizontal = 24.dp))
+                        CommentsScreen(detail, false)
                     }
                     if (maxWidth >= 840.dp) Row {
-                        Column(Modifier.weight(1f)) { about() }
-                        Column(Modifier.weight(1f).padding(top = 24.dp)) { episodes() }
-                    } else Column(verticalArrangement = Arrangement.spacedBy(24.dp)) { about(); episodes() }
+                        Column(Modifier.weight(2f), verticalArrangement = Arrangement.spacedBy(24.dp)) { main() }
+                        Column(Modifier.weight(1f).padding(top = 24.dp)) { DetailRelatedTitles(detail) }
+                    } else Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        main()
+                        DetailRelatedTitles(detail)
+                    }
                 }
-                Column(Modifier.widthIn(max = 1080.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    HorizontalDivider(Modifier.padding(horizontal = 24.dp))
-                    Text(ui(R.string.comments_tab), Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleLarge)
-                    CommentsScreen(detail, false)
-                    if (detail.optJSONArray("relations").objects().isNotEmpty()) {
-                        SectionHeading(ui(R.string.related_titles), Modifier.padding(horizontal = 24.dp)) {
-                        navigator.open(Screen.Collection, json("title" to ui(R.string.related_titles), "items" to detail.optJSONArray("relations")))
-                    }
-                        TitleRow(detail.optJSONArray("relations"), false)
-                    }
-                    if (detail.optJSONArray("recommendations").objects().isNotEmpty()) {
-                        SectionHeading(ui(R.string.recommendations), Modifier.padding(horizontal = 24.dp)) {
-                        navigator.open(Screen.Collection, json("title" to ui(R.string.recommendations), "items" to detail.optJSONArray("recommendations")))
-                    }
-                        TitleRow(detail.optJSONArray("recommendations"), false)
-                    }
-                    Spacer(Modifier.height(24.dp))
-                }
+                Spacer(Modifier.height(24.dp))
             }
         }
         else Column(Modifier.fillMaxSize()) {
@@ -99,5 +92,39 @@ internal fun DetailScreen(args: JSONObject, isTv: Boolean, onBack: () -> Unit = 
         }
     }
     }
+    }
+}
+
+@Composable
+private fun DetailRelatedTitles(media: JSONObject) {
+    val navigator = LocalNavigator.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        listOf(R.string.related_titles to "relations", R.string.recommendations to "recommendations").forEach { (label, key) ->
+            val titles = media.optJSONArray(key)
+            if (titles.objects().isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SectionHeading(ui(label), Modifier.padding(horizontal = 24.dp)) {
+                        navigator.open(Screen.Collection, json("title" to ui(label), "items" to titles))
+                    }
+                    if (LocalConfiguration.current.screenWidthDp >= 600) {
+                        Column {
+                            titles.objects().forEach { value ->
+                                val card = CatalogTitle(value)
+                                ListItem(headlineContent = { Text(card.title, maxLines = 2) },
+                                    supportingContent = { Text(listOf(card.meta, card.info).filter(String::isNotBlank).joinToString("\n")) },
+                                    leadingContent = {
+                                        AppImage(card.poster, null, Modifier.width(64.dp).aspectRatio(2f / 3f).clip(MaterialTheme.shapes.medium),
+                                            contentScale = ContentScale.Crop)
+                                    },
+                                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                                    modifier = Modifier.clickable {
+                                        navigator.open(Screen.Detail, json("slug" to card.slug, "mediaType" to card.type))
+                                    })
+                            }
+                        }
+                    } else TitleRow(titles, false)
+                }
+            }
+        }
     }
 }

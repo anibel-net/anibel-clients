@@ -21,7 +21,7 @@ internal fun DetailItems(rows: List<JSONObject>, isTv: Boolean, dividers: Boolea
         items(rows) { content(it) }
     } else {
         var visible by rememberSaveable(rows.size) { mutableIntStateOf(8) }
-        Column(verticalArrangement = Arrangement.spacedBy(if (dividers) 8.dp else 16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (dividers) 8.dp else 0.dp)) {
             rows.take(visible).forEach { item ->
                 Column(Modifier.fillMaxWidth()) { content(item) }
                 if (dividers) HorizontalDivider()

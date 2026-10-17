@@ -32,7 +32,7 @@ internal fun DetailContent(media: JSONObject, isTv: Boolean) {
                 var resource by rememberSaveable { mutableStateOf("all_sources") }
                 val choices = coreData(CoreCommand.EpisodeChoices, json("mediaId" to card.id, "kind" to language,
                     "resource" to resource.toLongOrNull()), revision)
-                Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = if (isTv) 24.dp else 0.dp)) {
                     DataContent(choices, isTv, { revision++ }) { value ->
                         val data = value as? JSONObject ?: JSONObject()
                         val kinds = data.optJSONArray("kinds").strings()
@@ -54,7 +54,7 @@ internal fun DetailContent(media: JSONObject, isTv: Boolean) {
                         DetailItems(episodes, isTv, dividers = false, grid = isTv) { episode ->
                             val screenshots = episodeScreenshots(episode.text("url"))
                             val screenshot = screenshots?.getOrNull(screenshots.size / 2)
-                            if (!isTv) MobileEpisodeCard(
+                            if (!isTv) MobileEpisodeItem(
                                 episode = episode, screenshot = screenshot, screenshotLoading = screenshots == null, busy = action.busy,
                                 signedIn = LocalSession.current.optBoolean("authenticated"),
                                 play = { navigator.open(Screen.Player, json("url" to episode.text("url"),

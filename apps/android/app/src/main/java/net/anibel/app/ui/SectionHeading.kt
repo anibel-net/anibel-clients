@@ -10,13 +10,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun SectionHeading(title: String, modifier: Modifier = Modifier, isTv: Boolean = false, open: () -> Unit) {
+internal fun SectionHeading(title: String, modifier: Modifier = Modifier, isTv: Boolean = false, open: (() -> Unit)? = null) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-        if (isTv) androidx.tv.material3.IconButton(open, Modifier.size(36.dp)) {
-            androidx.tv.material3.Icon(painterResource(R.drawable.ic_back), title, Modifier.size(20.dp).rotate(180f))
-        } else FilledTonalIconButton(open, Modifier.size(36.dp), colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
-            Icon(painterResource(R.drawable.ic_back), title, Modifier.size(20.dp).rotate(180f))
+        if (open != null) {
+            if (isTv) androidx.tv.material3.IconButton(open, Modifier.size(36.dp)) {
+                androidx.tv.material3.Icon(painterResource(R.drawable.ic_back), title, Modifier.size(20.dp).rotate(180f))
+            } else FilledTonalIconButton(open, Modifier.size(36.dp), colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Icon(painterResource(R.drawable.ic_back), title, Modifier.size(20.dp).rotate(180f))
+            }
         }
     }
 }

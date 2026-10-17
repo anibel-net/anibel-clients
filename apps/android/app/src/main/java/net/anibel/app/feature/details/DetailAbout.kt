@@ -129,7 +129,7 @@ internal fun DetailAbout(media: JSONObject, isTv: Boolean, openContent: (() -> U
         }
         val description = Html.fromHtml(media.localized("description"), Html.FROM_HTML_MODE_COMPACT).toString().trim()
         if (description.isNotBlank()) {
-            Text(ui(R.string.about), style = MaterialTheme.typography.titleLarge)
+            SectionHeading(ui(R.string.about), isTv = isTv)
             Text(description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         val credits = listOfNotNull(media.text("studio"), media.text("country")?.let(::keyLabel)).joinToString(" · ")

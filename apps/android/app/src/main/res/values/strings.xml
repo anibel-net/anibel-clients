@@ -328,4 +328,6 @@
     <string name="expand_navigation">Разгарнуць навігацыю</string>
     <string name="navigation_collapsed">Навігацыя згорнутая</string>
     <string name="navigation_expanded">Навігацыя разгорнутая</string>
+    <string name="chapters">Главы</string>
+    <string name="episodes">Серыі</string>
 </resources>
