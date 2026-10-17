@@ -59,8 +59,8 @@ repository-wide latest release link. The release feed is fixed to
 2. Push a tag on that commit, for example:
 
    ```powershell
-   git tag android-v0.1.0
-   git push origin android-v0.1.0
+   git tag android-v0.1.1
+   git push origin android-v0.1.1
    ```
 
 3. CI builds the Rust core and both Android build types. It runs unit tests, lint,
@@ -91,7 +91,7 @@ Use the SDK, NDK, JDK, and Rust setup from README.md. From the repository root:
 Push-Location apps/android
 .\gradlew.bat :app:assembleRelease :app:lintRelease
 Pop-Location
-python scripts/package-android.py --apk apps/android/app/build/outputs/apk/release/app-release-unsigned.apk --output artifacts/android-release-0.1.0 --secrets-file $SigningSecrets
+python scripts/package-android.py --apk apps/android/app/build/outputs/apk/release/app-release-unsigned.apk --output artifacts/android-release-0.1.1 --secrets-file $SigningSecrets
 ```
 
 Python 3.11 or newer is required. Set `ANDROID_HOME` to the SDK directory and keep
