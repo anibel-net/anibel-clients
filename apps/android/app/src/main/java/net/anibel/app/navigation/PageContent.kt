@@ -10,16 +10,20 @@ import androidx.compose.material3.Text as MobileText
 import androidx.tv.material3.Text as TvText
 
 @Composable
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 internal fun PageContent(page: AppPage, isTv: Boolean, modifier: Modifier = Modifier) {
     if (page in AppPage.catalogs) {
         CatalogScreen(page, isTv, modifier)
         return
     }
     Column(modifier.fillMaxSize().testTag("page_${page.name}")) {
+        if (!isTv && page in listOf(AppPage.Download, AppPage.Settings)) androidx.compose.material3.TopAppBar(
+            title = { MobileText(stringResource(page.title)) }, windowInsets = WindowInsets(0, 0, 0, 0))
         if (isTv && page != AppPage.Home && page !in AppPage.catalogs) androidx.tv.material3.Text(stringResource(page.title),
             Modifier.padding(24.dp), style = androidx.tv.material3.MaterialTheme.typography.headlineSmall)
         when (page) {
             AppPage.Home -> HomeScreen(isTv)
+            AppPage.Search -> SearchScreen(isTv)
             AppPage.Favorites -> if (isTv) TvLibraryScreen() else PersonalScreen("favorites", false)
             AppPage.Profile -> ProfileScreen(isTv, edgeToEdge = !isTv)
             AppPage.Download -> DownloadsScreen(isTv)

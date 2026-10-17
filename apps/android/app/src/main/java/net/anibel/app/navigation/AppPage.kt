@@ -8,6 +8,7 @@ internal enum class AppPage(
     @get:DrawableRes val icon: Int,
 ) {
     Home(R.string.nav_home, R.drawable.ic_home),
+    Search(R.string.search, R.drawable.ic_search),
     Catalogs(R.string.nav_catalogs, R.drawable.ic_catalogs),
     Favorites(R.string.nav_favorites, R.drawable.ic_favorite),
     Profile(R.string.nav_profile, R.drawable.ic_profile),

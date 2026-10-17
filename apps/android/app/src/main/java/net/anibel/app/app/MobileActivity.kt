@@ -38,15 +38,17 @@ internal fun MobileApp() {
     SystemTheme {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth >= 600.dp
+            val compactPage = when (page) {
+                AppPage.Search -> AppPage.Home
+                AppPage.Download, AppPage.Settings -> AppPage.Profile
+                else -> page
+            }
             Row(Modifier.fillMaxSize()) {
-                if (wide) NavigationRail(Modifier.fillMaxHeight().testTag("mobile_navigation_rail")) {
-                    Spacer(Modifier.height(24.dp))
-                    AppPage.mobileNavigation.forEach { destination ->
-                        NavigationRailItem(selected = page == destination, onClick = { page = destination },
-                            icon = { Icon(painterResource(destination.icon), null) },
-                            label = { Text(stringResource(destination.title)) },
-                            modifier = Modifier.testTag("nav_${destination.name}"))
-                    }
+                if (wide) TabletNavigation(if (page == AppPage.Catalogs) catalog else page) { destination ->
+                    if (destination in AppPage.catalogs) {
+                        catalog = destination
+                        page = AppPage.Catalogs
+                    } else page = destination
                 }
                 Scaffold(Modifier.weight(1f),
                     contentWindowInsets = if (page == AppPage.Profile) WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal) else WindowInsets.safeDrawing,
@@ -72,22 +74,14 @@ internal fun MobileApp() {
                                             modifier = Modifier.height(40.dp).testTag("saved_catalog_${item?.name ?: "All"}"))
                                     }
                                 }
+                                if (wide) PersonalListTabs(savedList, { savedList = it }, secondary = true)
                             }
                         }
                     },
                     bottomBar = {
                         Column {
-                            if (page == AppPage.Favorites) {
-                                PrimaryScrollableTabRow(selectedTabIndex = PersonalList.entries.indexOf(savedList), edgePadding = 12.dp) {
-                                    PersonalList.entries.forEach { item ->
-                                        Tab(selected = savedList == item, onClick = { savedList = item },
-                                            text = { Text(item.label, style = MaterialTheme.typography.labelMedium) },
-                                            modifier = Modifier.height(40.dp).testTag("saved_${item.name}"))
-                                    }
-                                }
-
-                            }
-                            if (page == AppPage.Catalogs) {
+                            if (page == AppPage.Favorites && !wide) PersonalListTabs(savedList, { savedList = it })
+                            if (page == AppPage.Catalogs && !wide) {
                                 PrimaryTabRow(selectedTabIndex = AppPage.catalogs.indexOf(catalog)) {
                                     AppPage.catalogs.forEach { item ->
                                         Tab(selected = catalog == item, onClick = { catalog = item },
@@ -100,7 +94,7 @@ internal fun MobileApp() {
                             }
                         if (!wide) NavigationBar(Modifier.testTag("mobile_bottom_bar")) {
                             AppPage.mobileNavigation.forEach { destination ->
-                                NavigationBarItem(selected = page == destination, onClick = { page = destination },
+                                NavigationBarItem(selected = compactPage == destination, onClick = { page = destination },
                                     icon = { Icon(painterResource(destination.icon), null) },
                                     label = { Text(stringResource(destination.title)) },
                                     modifier = Modifier.testTag("nav_${destination.name}"))
@@ -124,4 +118,17 @@ internal fun MobileApp() {
             }
         }
     }
+}
+
+@Composable
+private fun PersonalListTabs(selected: PersonalList, onSelect: (PersonalList) -> Unit, secondary: Boolean = false) {
+    val tabs: @Composable () -> Unit = {
+        PersonalList.entries.forEach { item ->
+            Tab(selected = selected == item, onClick = { onSelect(item) },
+                text = { Text(item.label, style = MaterialTheme.typography.labelMedium) },
+                modifier = Modifier.height(40.dp).testTag("saved_${item.name}"))
+        }
+    }
+    if (secondary) SecondaryScrollableTabRow(selectedTabIndex = PersonalList.entries.indexOf(selected), edgePadding = 12.dp) { tabs() }
+    else PrimaryScrollableTabRow(selectedTabIndex = PersonalList.entries.indexOf(selected), edgePadding = 12.dp) { tabs() }
 }

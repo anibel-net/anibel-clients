@@ -52,7 +52,7 @@ internal fun CatalogScreen(catalog: AppPage, isTv: Boolean, modifier: Modifier =
                         (grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= model.titles.size - 10
                 }.collect { nearEnd -> if (nearEnd) model.load() }
             }
-            LazyVerticalGrid(GridCells.Adaptive(if (isTv) 124.dp else 108.dp), Modifier.weight(1f).testTag("titles"),
+            LazyVerticalGrid(titleGridCells(isTv), Modifier.weight(1f).testTag("titles"),
                 state = grid,
                 contentPadding = PaddingValues(top = 12.dp, bottom = if (isTv) 12.dp else 88.dp), horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)) {

@@ -324,4 +324,8 @@
     <string name="theme_dark">Цёмная</string>
     <string name="theme_light">Светлая</string>
     <string name="theme_system">Сістэмная</string>
+    <string name="collapse_navigation">Згарнуць навігацыю</string>
+    <string name="expand_navigation">Разгарнуць навігацыю</string>
+    <string name="navigation_collapsed">Навігацыя згорнутая</string>
+    <string name="navigation_expanded">Навігацыя разгорнутая</string>
 </resources>

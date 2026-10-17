@@ -11,10 +11,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
+
+@Composable
+internal fun titleGridCells(isTv: Boolean): GridCells = GridCells.Adaptive(when {
+    isTv -> 124.dp
+    LocalConfiguration.current.screenWidthDp >= 600 -> 180.dp
+    else -> 108.dp
+})
+
+@Composable
+internal fun titleRowWidth(isTv: Boolean) = when {
+    isTv -> 132.dp
+    LocalConfiguration.current.screenWidthDp >= 600 -> 180.dp
+    else -> 144.dp
+}
 
 @Composable
 internal fun TitleCard(title: CatalogTitle, isTv: Boolean, modifier: Modifier = Modifier) {
@@ -63,8 +78,9 @@ internal fun TitleCard(title: CatalogTitle, isTv: Boolean, modifier: Modifier = 
 
 @Composable
 internal fun TitleRow(values: JSONArray?, isTv: Boolean) {
+    val width = titleRowWidth(isTv)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(8.dp)) {
-        items(values.objects()) { value -> TitleCard(CatalogTitle(value), isTv, Modifier.width(if (isTv) 132.dp else 144.dp)) }
+        items(values.objects()) { value -> TitleCard(CatalogTitle(value), isTv, Modifier.width(width)) }
     }
 }
 
@@ -72,7 +88,7 @@ internal fun TitleRow(values: JSONArray?, isTv: Boolean) {
 internal fun TitleGrid(values: JSONArray?, isTv: Boolean, modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(24.dp), showCount: Boolean = false) {
     val cards = values.objects()
-    LazyVerticalGrid(GridCells.Adaptive(if (isTv) 124.dp else 108.dp), modifier.fillMaxSize(),
+    LazyVerticalGrid(titleGridCells(isTv), modifier.fillMaxSize(),
         contentPadding = contentPadding, horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (showCount) item(span = { GridItemSpan(maxLineSpan) }) {

@@ -16,6 +16,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,6 +29,34 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MobileNavigationTest {
     @get:Rule val compose = createAndroidComposeRule<MobileActivity>()
+
+    private fun isTablet() = compose.onAllNodes(hasTestTag("tablet_navigation")).fetchSemanticsNodes().isNotEmpty()
+
+    private fun selectPage(page: AppPage) {
+        val item = compose.onNodeWithTag("nav_${page.name}")
+        if (isTablet() && page !in listOf(AppPage.Profile, AppPage.Favorites, AppPage.Download, AppPage.Settings)) item.performScrollTo()
+        item.performClick()
+    }
+
+    private fun selectCatalog(catalog: AppPage) {
+        if (isTablet()) selectPage(catalog)
+        else {
+            compose.onNodeWithTag("nav_Catalogs").performClick()
+            compose.onNodeWithTag("catalog_${catalog.name}").performClick()
+        }
+    }
+
+    private fun assertCatalogSelected(catalog: AppPage) {
+        if (isTablet()) compose.onNodeWithTag("nav_${catalog.name}").assertIsSelected()
+        else {
+            compose.onNodeWithTag("nav_Catalogs").assertIsSelected()
+            compose.onNodeWithTag("catalog_${catalog.name}").assertIsSelected()
+        }
+    }
+
+    private fun openProfileLink(label: String) {
+        compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag("page_Profile"))).performScrollTo().performClick()
+    }
 
     @Test
     fun profileEditingUsesSeparatePageAndBackDiscardsDraft() {
@@ -47,18 +78,22 @@ class MobileNavigationTest {
 
     @Test
     fun savedListAndMediaTabsPersist() {
-        compose.onNodeWithTag("nav_Favorites").performClick()
+        selectPage(AppPage.Favorites)
         compose.onNodeWithTag("saved_catalog_All").assertIsSelected()
         val mediaTab = compose.onNodeWithTag("saved_catalog_All").fetchSemanticsNode().boundsInRoot
         val statusTab = compose.onNodeWithTag("saved_Favorites").fetchSemanticsNode().boundsInRoot
-        org.junit.Assert.assertTrue(mediaTab.bottom < statusTab.top)
+        org.junit.Assert.assertTrue(mediaTab.bottom <= statusTab.top)
+        if (isTablet()) {
+            val content = compose.onNodeWithTag("page_Favorites").fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue(statusTab.bottom <= content.top)
+        }
         compose.onNodeWithTag("saved_Done").performClick().assertIsSelected()
         compose.onNodeWithTag("saved_catalog_Manga").performClick().assertIsSelected()
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("saved_Done").assertIsSelected()
         compose.onNodeWithTag("saved_catalog_Manga").assertIsSelected()
         compose.onNodeWithTag("nav_Profile").performClick()
-        compose.onNodeWithTag("nav_Favorites").performClick()
+        selectPage(AppPage.Favorites)
         compose.onNodeWithTag("saved_Done").assertIsSelected()
         compose.onNodeWithTag("saved_catalog_Manga").assertIsSelected()
     }
@@ -85,7 +120,7 @@ class MobileNavigationTest {
 
     @Test
     fun fullScreenFiltersApplyYear() {
-        compose.onNodeWithTag("nav_Catalogs").performClick()
+        selectCatalog(AppPage.Anime)
         compose.onNodeWithTag("filters").performClick()
         compose.waitUntil(45_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(ui(R.string.filter_year))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(ui(R.string.filter_year)).performClick()
@@ -96,7 +131,8 @@ class MobileNavigationTest {
 
     @Test
     fun searchSubmitsFromKeyboard() {
-        compose.onNodeWithTag("open_search").performClick()
+        if (isTablet()) selectPage(AppPage.Search)
+        else compose.onNodeWithTag("open_search").performClick()
         compose.onNodeWithText(ui(R.string.search_titles)).performTextInput("Avatar")
         compose.onNode(androidx.compose.ui.test.hasSetTextAction()).performImeAction()
         val titles = SemanticsMatcher("title card") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("title_") == true }
@@ -106,7 +142,7 @@ class MobileNavigationTest {
     @Test
     fun languageSwitchPersistsAndReturnsToBelarusian() {
         compose.onNodeWithTag("nav_Profile").performClick()
-        compose.onNodeWithText(ui(R.string.settings)).performScrollTo().performClick()
+        openProfileLink(ui(R.string.settings))
         compose.onNodeWithText("English").performClick()
         compose.waitUntil(10_000) { Language.current(compose.activity) == AppLanguage.English && ui(R.string.settings) == "Settings" }
         compose.onNodeWithText("Settings").assertIsDisplayed()
@@ -119,7 +155,7 @@ class MobileNavigationTest {
 
     @Test
     fun liveTitleOpensDetailsAndBackKeepsCatalog() {
-        compose.onNodeWithTag("nav_Catalogs").performClick()
+        selectCatalog(AppPage.Anime)
         val titles = SemanticsMatcher("title card") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("title_") == true }
         compose.waitUntil(45_000) { compose.onAllNodes(titles).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodes(titles)[0].performClick()
@@ -135,19 +171,18 @@ class MobileNavigationTest {
         compose.onNodeWithTag("screen_Detail").performTouchInput { swipeUp() }
         compose.onNodeWithTag("detail_toolbar_title").assertIsDisplayed()
         compose.onNodeWithTag("back").performClick()
-        compose.onNodeWithTag("nav_Catalogs").assertIsSelected()
-        compose.onNodeWithTag("catalog_Anime").assertIsSelected()
+        assertCatalogSelected(AppPage.Anime)
     }
 
     @Test
     fun profileLinksOpenNativePagesAndBackKeepsProfile() {
         compose.onNodeWithTag("nav_Profile").performClick()
         // The device can have an existing signed-in session.
-        compose.onNodeWithText(ui(R.string.nav_settings)).performScrollTo().performClick()
+        openProfileLink(ui(R.string.nav_settings))
         compose.onNodeWithTag("screen_Settings").assertIsDisplayed()
         compose.onNodeWithTag("back").performClick()
         compose.onNodeWithTag("nav_Profile").assertIsSelected()
-        compose.onNodeWithText(ui(R.string.nav_download)).performScrollTo().performClick()
+        openProfileLink(ui(R.string.nav_download))
         compose.onNodeWithTag("screen_Downloads").assertIsDisplayed()
         compose.onNodeWithTag("back").performClick()
         compose.onNodeWithTag("nav_Profile").assertIsSelected()
@@ -155,13 +190,15 @@ class MobileNavigationTest {
 
     @Test
     fun tabsAndCatalogSwitcherReturnHome() {
-        listOf("Favorites", "Profile", "Home", "Catalogs").forEach { destination ->
-            compose.onNodeWithTag("nav_$destination").performClick().assertIsSelected()
+        listOf("Favorites", "Profile", "Home").forEach { destination ->
+            selectPage(AppPage.valueOf(destination))
+            compose.onNodeWithTag("nav_$destination").assertIsSelected()
             compose.onNodeWithTag("page_$destination").assertIsDisplayed()
         }
-        compose.onNodeWithTag("catalog_Anime").performClick()
+        selectCatalog(AppPage.Anime)
+        compose.onNodeWithTag("page_Catalogs").assertIsDisplayed()
         compose.onNodeWithTag("page_Anime").assertIsDisplayed()
-        compose.onNodeWithTag("nav_Catalogs").assertIsSelected()
+        assertCatalogSelected(AppPage.Anime)
 
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithTag("page_Home").assertIsDisplayed()
@@ -170,10 +207,9 @@ class MobileNavigationTest {
 
     @Test
     fun selectedCatalogSurvivesActivityRecreation() {
-        compose.onNodeWithTag("nav_Catalogs").performClick()
-        compose.onNodeWithTag("catalog_Books").performClick()
+        selectCatalog(AppPage.Books)
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("page_Books").assertIsDisplayed()
-        compose.onNodeWithTag("nav_Catalogs").assertIsSelected()
+        assertCatalogSelected(AppPage.Books)
     }
 }

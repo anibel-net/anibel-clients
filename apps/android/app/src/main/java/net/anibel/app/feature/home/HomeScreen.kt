@@ -118,7 +118,7 @@ internal fun PagedTitles(op: CoreCommand, args: JSONObject, isTv: Boolean, reloa
         return
     }
     RefreshablePage(isTv, data == RemoteData.Loading && retry > 0, { offset = 0; retry++; refreshHeader?.invoke() }, Modifier.fillMaxSize()) {
-    LazyVerticalGrid(GridCells.Adaptive(if (isTv) 124.dp else 108.dp), Modifier.fillMaxSize(), state = grid,
+    LazyVerticalGrid(titleGridCells(isTv), Modifier.fillMaxSize(), state = grid,
         contentPadding = PaddingValues(if (isTv) 24.dp else 20.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { header() } }

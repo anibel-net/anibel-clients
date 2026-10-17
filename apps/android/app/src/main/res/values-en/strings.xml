@@ -324,4 +324,8 @@
     <string name="theme_dark">Dark</string>
     <string name="theme_light">Light</string>
     <string name="theme_system">System</string>
+    <string name="collapse_navigation">Collapse navigation</string>
+    <string name="expand_navigation">Expand navigation</string>
+    <string name="navigation_collapsed">Navigation collapsed</string>
+    <string name="navigation_expanded">Navigation expanded</string>
 </resources>
