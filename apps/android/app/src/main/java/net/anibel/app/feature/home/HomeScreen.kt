@@ -163,7 +163,6 @@ internal fun SearchScreen(isTv: Boolean, onBack: () -> Unit) {
     // SearchBar(state = ...) deliberately disables the software keyboard.
     SearchBar(expanded = true, onExpandedChange = { if (!it) close() },
         modifier = Modifier.fillMaxWidth().testTag("search_bar"), windowInsets = WindowInsets(0, 0, 0, 0),
-        colors = SearchBarDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), tonalElevation = 0.dp,
         inputField = {
             SearchBarDefaults.InputField(query = input, onQueryChange = { input = it },
                 onSearch = { submit() }, expanded = true, onExpandedChange = { if (!it) close() },
