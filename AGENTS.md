@@ -47,4 +47,4 @@ Use local fixtures for automated tests. Live tests must be explicit and must not
 
 ## Documentation and releases
 
-Keep README commands accurate. Update documentation when behavior or build steps change. Windows release tags use `windows-vX.Y.Z` or `windows-vX.Y.Z-beta.N`. Tags create drafts; do not publish or replace an existing release without authorization. Keep user data outside the installation directory.
+Keep README commands accurate. Update documentation when behavior or build steps change. Release notes must be in Belarusian only. Windows release tags use `windows-vX.Y.Z` or `windows-vX.Y.Z-beta.N`. Tags create drafts; do not publish or replace an existing release without authorization. Keep user data outside the installation directory.

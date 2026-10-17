@@ -70,7 +70,8 @@ repository-wide latest release link. The release feed is fixed to
    APK signature. It creates a **draft** GitHub release. Beta tags create drafts
    marked as prereleases. The workflow does not replace an existing release or
    change the repository's latest release selection.
-5. Check the files, test installation, add release notes, and publish the draft.
+5. Check the files, test installation, add release notes in Belarusian only, and
+   publish the draft.
 
 Keep these files together in the release:
 

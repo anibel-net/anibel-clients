@@ -114,4 +114,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" artifacts/android-release/* \
             --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false \
             --title "Anibel.Net ${GITHUB_REF_NAME#android-v} — Android" \
-            --notes "Signed APK for phones, tablets, and Android TV. Install the APK over the previous release to update. Android asks for approval. Keep the app installed to keep its data." "${extra[@]}"
+            --notes "Падпісаны APK для тэлефонаў, планшэтаў і Android TV. Для абнаўлення ўсталюйце APK паверх папярэдняй версіі. Android папросіць пацвярджэнне. Каб захаваць даныя, не выдаляйце праграму перад абнаўленнем." "${extra[@]}"
