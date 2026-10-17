@@ -34,11 +34,11 @@ internal class CatalogTitle(val data: JSONObject) {
     val title: String get() = data.localized("title").ifBlank { slug }
     val poster: String? get() = data.text("poster")
     val yearAndRating: String get() = listOfNotNull(data.text("year"),
-        data.optDouble("rating").takeIf { it.isFinite() && it > 0 }?.let { "â˜… %.1f".format(it / 2) }).joinToString(" Â· ")
-    val meta: String get() = listOf(keyLabel(type), yearAndRating).filter(String::isNotBlank).joinToString(" Â· ")
+        data.optDouble("rating").takeIf { it.isFinite() && it > 0 }?.let { "★ %.1f".format(it / 2) }).joinToString(" · ")
+    val meta: String get() = listOf(keyLabel(type), yearAndRating).filter(String::isNotBlank).joinToString(" · ")
     val info: String get() = listOfNotNull(data.text("status")?.let(::keyLabel),
         data.text("updateType")?.takeIf { it == "sub" || it == "dub" }?.let(::keyLabel) ?: data.optJSONArray("language")?.strings()?.joinToString(" / ", transform = ::keyLabel),
-        data.text("num")?.let { ui(if (type == "manga" || type == "books") R.string.chapter_number else R.string.episode_number, it) }).filter(String::isNotBlank).joinToString(" Â· ")
+        data.text("num")?.let { ui(if (type == "manga" || type == "books") R.string.chapter_number else R.string.episode_number, it) }).filter(String::isNotBlank).joinToString(" · ")
 }
 internal enum class LoadState { Loading, Ready, Failed }
 

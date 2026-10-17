@@ -59,17 +59,17 @@ internal fun DetailAbout(media: JSONObject, isTv: Boolean, openContent: (() -> U
                     media.optJSONObject("title")?.text("en")?.takeIf { it != card.title }?.let {
                         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(media.optJSONArray("genres").strings().joinToString(" Â· ", transform = ::keyLabel),
+                    Text(media.optJSONArray("genres").strings().joinToString(" · ", transform = ::keyLabel),
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(keyLabel(card.type), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                    val production = listOfNotNull(media.text("studio"), media.text("country")?.let(::keyLabel)).joinToString(" Â· ")
+                    val production = listOfNotNull(media.text("studio"), media.text("country")?.let(::keyLabel)).joinToString(" · ")
                     if (production.isNotBlank()) Text(production, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically) {
                 val facts = listOfNotNull(media.text("year"),
-                    media.optDouble("rating").takeIf { it.isFinite() && it > 0 }?.let { "â˜… %.1f / 5".format(it / 2) },
+                    media.optDouble("rating").takeIf { it.isFinite() && it > 0 }?.let { "★ %.1f / 5".format(it / 2) },
                     media.text("status")?.let(::keyLabel))
                 facts.forEachIndexed { index, fact ->
                     if (index > 0) VerticalDivider(Modifier.height(24.dp))
@@ -132,7 +132,7 @@ internal fun DetailAbout(media: JSONObject, isTv: Boolean, openContent: (() -> U
             Text(ui(R.string.about), style = MaterialTheme.typography.titleLarge)
             Text(description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        val credits = listOfNotNull(media.text("studio"), media.text("country")?.let(::keyLabel)).joinToString(" Â· ")
+        val credits = listOfNotNull(media.text("studio"), media.text("country")?.let(::keyLabel)).joinToString(" · ")
         if (isTv && credits.isNotBlank()) Text(credits, style = MaterialTheme.typography.labelLarge)
 
     }
