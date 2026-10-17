@@ -3,8 +3,9 @@ package net.anibel.app
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.border
+import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
@@ -21,7 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,6 +46,9 @@ internal fun HomeScreen(isTv: Boolean) {
     var revision by remember { mutableIntStateOf(0) }
     val slides = coreData(CoreCommand.Slider, json("limit" to 6), revision)
     val context = LocalContext.current
+    val tablet = !isTv && LocalConfiguration.current.screenWidthDp >= 600
+    val slideSize = if (tablet)
+        Modifier.fillMaxWidth().height(240.dp) else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
     var unavailableImages by remember(revision) { mutableStateOf(emptySet<String>()) }
     Column(Modifier.fillMaxSize()) {
         if (isTv) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
@@ -53,9 +59,9 @@ internal fun HomeScreen(isTv: Boolean) {
         key(revision) {
             SectionedUpdates(isTv, reload = revision > 0, refresh = { revision++ }) {
                 if (isTv) Text(ui(R.string.featured), style = MaterialTheme.typography.titleLarge)
-                DataContent(slides, isTv, { revision++ }, loadingModifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) { result ->
+                DataContent(slides, isTv, { revision++ }, loadingModifier = slideSize) { result ->
                     val available = (result as? JSONArray).objects().filter { it.text("img") !in unavailableImages }
-                    val slideContent: @Composable (JSONObject) -> Unit = { slide ->
+                    val slideContent: @Composable (JSONObject, Modifier) -> Unit = { slide, modifier ->
                         val click = {
                             slide.text("link")?.let { link ->
                                 val uri = Uri.parse(link)
@@ -69,7 +75,7 @@ internal fun HomeScreen(isTv: Boolean) {
                         }
                         val body: @Composable () -> Unit = {
                             Column {
-                                AppImage(slide.text("img"), null, Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                                AppImage(slide.text("img"), null, slideSize
                                     .clip(MaterialTheme.shapes.large), contentScale = ContentScale.Crop,
                                     onError = { slide.text("img")?.let { unavailableImages = unavailableImages + it } })
                                 ListItem(headlineContent = { Text(slide.localized("title"), maxLines = 2) },
@@ -78,14 +84,16 @@ internal fun HomeScreen(isTv: Boolean) {
                             }
                         }
                         if (isTv) androidx.tv.material3.Surface(click, Modifier.width(320.dp)) { body() }
-                        else Card(click, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)) { body() }
+                        else Card(click, modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)) { body() }
                     }
                     if (isTv) LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(available) { slideContent(it) }
-                    } else if (available.isNotEmpty()) HorizontalPager(
-                        state = rememberPagerState { available.size },
-                        contentPadding = PaddingValues(end = 16.dp), pageSpacing = 12.dp,
-                        modifier = Modifier.fillMaxWidth().testTag("home_carousel")) { index -> slideContent(available[index]) }
+                        items(available) { slideContent(it, Modifier) }
+                    } else if (available.isNotEmpty()) HorizontalCenteredHeroCarousel(
+                        state = rememberCarouselState { available.size }, itemSpacing = 12.dp,
+                        maxItemWidth = if (tablet) 480.dp else Dp.Unspecified,
+                        modifier = Modifier.fillMaxWidth().testTag("home_carousel")) { index ->
+                        slideContent(available[index], Modifier.maskClip(MaterialTheme.shapes.large))
+                    }
                 }
 
             }
@@ -148,7 +156,10 @@ internal fun SearchScreen(isTv: Boolean, onBack: (() -> Unit)? = null) {
         if (query.isNotBlank()) run { core.value(CoreCommand.SearchHistory, json("action" to "add", "query" to query)); revision++ }
     }
     Column(Modifier.fillMaxSize().padding(horizontal = if (isTv) 24.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SearchBar(state = rememberSearchBarState(), modifier = Modifier.fillMaxWidth(), inputField = {
+        SearchBar(state = rememberSearchBarState(), modifier = Modifier.fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SearchBarDefaults.inputFieldShape),
+            colors = SearchBarDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), tonalElevation = 0.dp,
+            inputField = {
             SearchBarDefaults.InputField(query = input, onQueryChange = { input = it },
                 onSearch = { submit() }, expanded = false, onExpandedChange = {},
                 placeholder = { Text(ui(R.string.search_titles)) },

@@ -6,12 +6,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,9 @@ internal fun MobileApp() {
     SystemTheme {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth >= 600.dp
+            val searchScroll = key(page) {
+                SearchBarDefaults.enterAlwaysSearchBarScrollBehavior(canScroll = { page == AppPage.Home || page == AppPage.Catalogs })
+            }
             val compactPage = when (page) {
                 AppPage.Search -> AppPage.Home
                 AppPage.Download, AppPage.Settings -> AppPage.Profile
@@ -50,12 +55,16 @@ internal fun MobileApp() {
                         page = AppPage.Catalogs
                     } else page = destination
                 }
-                Scaffold(Modifier.weight(1f),
+                Scaffold(Modifier.weight(1f).nestedScroll(searchScroll.nestedScrollConnection),
                     contentWindowInsets = if (page == AppPage.Profile) WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal) else WindowInsets.safeDrawing,
                     topBar = {
                         Column(if (page == AppPage.Profile) Modifier else Modifier.statusBarsPadding()) {
                             if (page == AppPage.Home || page == AppPage.Catalogs) SearchBar(state = rememberSearchBarState(),
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                modifier = Modifier.fillMaxWidth().then(searchScroll.searchBarScrollBehaviorModifier)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SearchBarDefaults.inputFieldShape),
+                                colors = SearchBarDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                                tonalElevation = 0.dp,
                                 inputField = {
                                     SearchBarDefaults.InputField(state = rememberTextFieldState(), onSearch = {},
                                         expanded = false, onExpandedChange = { if (it) navigator.open(Screen.Search, org.json.JSONObject()) },

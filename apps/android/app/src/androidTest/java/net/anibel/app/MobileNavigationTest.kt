@@ -3,6 +3,7 @@ package net.anibel.app
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -101,11 +102,13 @@ class MobileNavigationTest {
     @Test
     fun homeSectionsLoadOlderUpdatesWhenScrolling() {
         compose.waitUntil(45_000) { compose.onAllNodes(androidx.compose.ui.test.hasTestTag("updates_SUB_0")).fetchSemanticsNodes().isNotEmpty() }
-        repeat(10) {
-            if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag("updates_SUB_6")).fetchSemanticsNodes().isNotEmpty()) return@repeat
-            compose.onNodeWithTag("home_updates").performTouchInput { swipeUp(durationMillis = 600) }
+        val row = compose.onNodeWithTag("updates_row_SUB").performScrollTo()
+        repeat(8) {
+            row.performTouchInput { swipeLeft(durationMillis = 500) }
+            compose.waitForIdle()
         }
-        compose.onNodeWithTag("updates_SUB_6").assertExists()
+        row.performScrollToIndex(20)
+        compose.onNodeWithTag("updates_SUB_6").assertDoesNotExist()
     }
 
     @Test
