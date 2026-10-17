@@ -105,6 +105,9 @@
     <string name="no_episodes">No episodes are available yet.</string>
     <string name="play">Play</string>
     <string name="download">Download</string>
+    <string name="open_poster">Open poster</string>
+    <string name="image_saved">Image saved.</string>
+    <string name="localization">Release credits</string>
     <string name="download_added">Added to Downloads.</string>
     <string name="watched_checked">Watched ✓</string>
     <string name="mark_watched">Mark watched</string>
@@ -321,15 +324,13 @@
     <string name="app_update_install">Install update</string>
     <string name="app_update_check">Check for updates</string>
     <string name="app_update_install_hint">If Android opens settings, allow installs from this app. Then return and select Install update.</string>
-    <string name="theme_dark">Dark</string>
-    <string name="theme_light">Light</string>
-    <string name="theme_system">System</string>
-    <string name="collapse_navigation">Collapse navigation</string>
     <string name="expand_navigation">Expand navigation</string>
-    <string name="navigation_collapsed">Navigation collapsed</string>
+    <string name="collapse_navigation">Collapse navigation</string>
     <string name="navigation_expanded">Navigation expanded</string>
-    <string name="chapters">Chapters</string>
+    <string name="navigation_collapsed">Navigation collapsed</string>
     <string name="episodes">Episodes</string>
-    <string name="image_saved">Image saved.</string>
-    <string name="open_poster">Open poster</string>
+    <string name="chapters">Chapters</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
 </resources>

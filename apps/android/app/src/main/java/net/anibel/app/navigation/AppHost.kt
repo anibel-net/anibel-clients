@@ -107,16 +107,20 @@ internal fun AppHost(isTv: Boolean, content: @Composable () -> Unit) {
                             TitleOptions(args, null, isTv = true)
                         }
                     } else if (screen != Screen.Search && screen != Screen.Detail) androidx.compose.material3.TopAppBar(
-                        title = { if (screen != Screen.Detail && screen != Screen.Search) androidx.compose.material3.Text(args.text("title") ?: screen.label) },
+                        title = { androidx.compose.material3.Text(args.text("title") ?: screen.label,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                         navigationIcon = {
                             androidx.compose.material3.IconButton({ stack = stack.dropLast(1) }, Modifier.testTag("back")) {
                                 androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_back), ui(R.string.back))
                             }
                         }, windowInsets = WindowInsets(0, 0, 0, 0))
                     when (screen) {
-                        Screen.Collection -> if (args.optString("op") == "updatesPage")
-                            PagedTitles(CoreCommand.UpdatesPage, json("type" to args.optString("type", "ALL")), isTv)
-                        else TitleGrid(args.optJSONArray("items"), isTv)
+                        Screen.Collection -> when (args.optString("op")) {
+                            CoreCommand.UpdatesPage.wire -> PagedTitles(CoreCommand.UpdatesPage, json("type" to args.optString("type", "ALL")), isTv)
+                            CoreCommand.MediaList.wire -> PagedTitles(CoreCommand.MediaList,
+                                json("mediaType" to args.text("mediaType"), "filters" to args.optJSONObject("filters")), isTv)
+                            else -> TitleGrid(args.optJSONArray("items"), isTv)
+                        }
                         Screen.Detail -> DetailScreen(args, isTv) { stack = stack.dropLast(1) }
                         Screen.Search -> SearchScreen(isTv) { stack = stack.dropLast(1) }
                         Screen.EditProfile -> Box(Modifier.weight(1f).imePadding()) {

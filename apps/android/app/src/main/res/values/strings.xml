@@ -105,6 +105,9 @@
     <string name="no_episodes">Серыі пакуль недаступныя.</string>
     <string name="play">Глядзець</string>
     <string name="download">Спампаваць</string>
+    <string name="open_poster">Адкрыць постар</string>
+    <string name="image_saved">Выява захавана.</string>
+    <string name="localization">Над рэлізам працавалі</string>
     <string name="download_added">Дададзена ў спампоўкі.</string>
     <string name="watched_checked">Прагледжана ✓</string>
     <string name="mark_watched">Пазначыць прагледжаным</string>
@@ -321,15 +324,13 @@
     <string name="app_update_install">Усталяваць абнаўленне</string>
     <string name="app_update_check">Праверыць абнаўленні</string>
     <string name="app_update_install_hint">Калі Android адкрые налады, дазвольце ўсталяванне з гэтай праграмы. Затым вярніцеся і націсніце «Усталяваць абнаўленне».</string>
-    <string name="theme_dark">Цёмная</string>
-    <string name="theme_light">Светлая</string>
-    <string name="theme_system">Сістэмная</string>
-    <string name="collapse_navigation">Згарнуць навігацыю</string>
     <string name="expand_navigation">Разгарнуць навігацыю</string>
-    <string name="navigation_collapsed">Навігацыя згорнутая</string>
+    <string name="collapse_navigation">Згарнуць навігацыю</string>
     <string name="navigation_expanded">Навігацыя разгорнутая</string>
-    <string name="chapters">Главы</string>
+    <string name="navigation_collapsed">Навігацыя згорнутая</string>
     <string name="episodes">Серыі</string>
-    <string name="image_saved">Выява захавана.</string>
-    <string name="open_poster">Адкрыць постар</string>
+    <string name="chapters">Главы</string>
+    <string name="theme_system">Сістэмная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Цёмная</string>
 </resources>

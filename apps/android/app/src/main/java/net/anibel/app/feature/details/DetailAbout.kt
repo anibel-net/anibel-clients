@@ -142,8 +142,30 @@ internal fun DetailAbout(media: JSONObject, isTv: Boolean, openContent: (() -> U
             SectionHeading(ui(R.string.about), isTv = isTv)
             Text(description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        LocalizationCredits(media, isTv)
         val credits = listOfNotNull(media.text("studio"), media.text("country")?.let(::keyLabel)).joinToString(" · ")
         if (isTv && credits.isNotBlank()) Text(credits, style = MaterialTheme.typography.labelLarge)
 
+    }
+}
+
+@Composable
+private fun LocalizationCredits(media: JSONObject, isTv: Boolean) {
+    val navigator = LocalNavigator.current
+    val credits = listOf(FilterKey.Translator, FilterKey.Editor, FilterKey.Dubber, FilterKey.AudioEngineer,
+        FilterKey.Programmer, FilterKey.Typesetter, FilterKey.Cleaner).flatMap { role ->
+        media.optJSONArray(role.wire).strings().filter(String::isNotBlank).map { name -> role to name }
+    }
+    if (credits.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SectionHeading(ui(R.string.localization), isTv = isTv)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            credits.forEach { (role, name) ->
+                val label = "${role.label}: $name"
+                val open = { navigator.open(Screen.Collection, json("title" to label, "op" to CoreCommand.MediaList.wire,
+                    "mediaType" to CatalogTitle(media).type, "filters" to json(role.wire to org.json.JSONArray().put(name)))) }
+                if (isTv) AppButton(label, true, open)
+                else AssistChip(onClick = open, label = { Text(label) })
+            }
+        }
     }
 }
