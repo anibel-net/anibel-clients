@@ -3,13 +3,31 @@
 One Kotlin app supports phones, tablets, Android TV, and Google TV.
 
 - `MobileActivity`: Home, Catalogs, Favorites, and Profile in a bottom bar.
-  Catalogs has Anime, Manga, Cinema, Games, and Books tabs below the search bar.
-  At 600 dp the bottom bar becomes a side rail. At 840 dp, title details place
-  the summary and episodes/chapters side by side. The title grid adapts to width.
+  Catalogs has Anime, Manga, Cinema, Games, and Books tabs.
+- At 600 dp the bottom bar becomes a standard Material 3 expandable navigation
+  rail with Search and direct catalog links. Its menu button changes only the
+  item layout; both views keep the same links. Profile, Favorites, Downloads, and
+  Settings stay at the bottom. The expanded rail is limited to 220 dp. Tablet
+  Favorites places primary media tabs and secondary list tabs together at the
+  top. Catalog tabs remain on phones. Title grids use a 180 dp minimum card width
+  on tablets and 108 dp on phones.
+- Home uses the Material 3 hero carousel. Tablet slider images use a 240 dp
+  height. Each update section is one horizontal row with independent pagination.
+  The search bar hides when scrolling down and returns when scrolling up.
+- At 840 dp, title details place About, compact episode/chapter rows, and Comments
+  on the left and related/recommended title lists on the right. Episode rows show
+  the date and a watched checkbox, disabled when signed out. Preview images use
+  the Material carousel. Credit chips after the description open titles by
+  contributor and role. Posters open full screen and can be saved as PNG files
+  with the system file picker.
+- Filters use Material Components' native 360 dp `SideSheetDialog` on the right
+  on tablets and use the full screen on phones. Profile, Downloads, and Settings
+  use grouped Material lists and cards.
 - `TvActivity`: Home, Anime, Manga, Cinema, Games, Books, Profile, Download,
   and Settings in a sidebar. Use the remote D-pad and select button.
 - Phone and tablet controls use Material 3 Expressive; TV uses TV Material.
-  Both layouts follow system light/dark mode and Android 12+ system colors.
+  Settings offers System, Light, and Dark themes. Both layouts use Android 12+
+  system colors.
   Earlier Android versions use the standard Material color schemes.
 - One application ID (`net.anibel.app`), app module, and APK. No device flavors.
 - Minimum Android 8.0 (API 26); compile API 37.2 and target API 37.
@@ -105,7 +123,8 @@ input setup (`InputManager.getInstance` is absent). Core integration tests run;
 UI flows must currently be checked with emulator input. TV UI tests run on API 36.
 The TV AVD enables hardware keyboard input: use arrow keys and Enter.
 
-The catalog and Home updates load the next page as the grid approaches its end.
+Catalogs load the next page near the end of the grid. Each Home section appears
+once, as a horizontal row. Each row loads its own next page near its end.
 TV filters use a two-column D-pad layout. Sidebar focus selects the page; its
 Profile, Downloads, and Settings entries stay at the bottom.
 
