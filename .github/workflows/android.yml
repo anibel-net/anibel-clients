@@ -44,8 +44,6 @@ jobs:
       - name: Build and check Android
         working-directory: apps/android
         run: bash gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
-      - name: Generate local update fixtures
-        run: python scripts/create-android-update-fixtures.py
       - name: Build local device tests
         working-directory: apps/android
         run: bash gradlew :app:assembleDebugAndroidTest

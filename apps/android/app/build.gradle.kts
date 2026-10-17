@@ -61,6 +61,18 @@ val buildRust = tasks.register<Exec>("buildRust") {
 }
 tasks.named("preBuild") { dependsOn(buildRust, copyNotices) }
 
+val generateUpdateFixtures = tasks.register<Exec>("generateUpdateFixtures") {
+    val repository = rootProject.file("../..")
+    val debugKey = requireNotNull(android.signingConfigs.getByName("debug").storeFile)
+    workingDir(repository)
+    commandLine("python", repository.resolve("scripts/create-android-update-fixtures.py"), "--debug-keystore", debugKey)
+    dependsOn("validateSigningDebug")
+    inputs.files(repository.resolve("scripts/create-android-update-fixtures.py"),
+        repository.resolve("scripts/package-android.py"), rootProject.file("version.properties"), debugKey)
+    outputs.dir(layout.buildDirectory.dir("update-fixtures"))
+}
+tasks.matching { it.name == "mergeDebugAndroidTestAssets" }.configureEach { dependsOn(generateUpdateFixtures) }
+
 kotlin { jvmToolchain(17) }
 
 dependencies {

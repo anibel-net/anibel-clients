@@ -1,5 +1,6 @@
 """Create small local APKs for Android update certificate and package checks."""
 
+import argparse
 import importlib.util
 import os
 from pathlib import Path
@@ -11,12 +12,15 @@ spec.loader.exec_module(release)
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--debug-keystore", type=Path, required=True)
+    args = parser.parse_args()
     env = dict(os.environ)
     sdk = Path(env["ANDROID_HOME"])
     tools = sdk / "build-tools/37.0.0"
     aapt = tools / ("aapt2.exe" if os.name == "nt" else "aapt2")
     signer = tools / ("apksigner.bat" if os.name == "nt" else "apksigner")
-    debug_key = Path.home() / ".android/debug.keystore"
+    debug_key = args.debug_keystore.resolve()
     if not debug_key.is_file():
         raise ValueError("Build assembleDebug first to create the debug keystore.")
     _, code = release.read_version()

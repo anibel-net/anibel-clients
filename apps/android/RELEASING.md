@@ -59,8 +59,8 @@ repository-wide latest release link. The release feed is fixed to
 2. Push a tag on that commit, for example:
 
    ```powershell
-   git tag android-v0.1.1
-   git push origin android-v0.1.1
+   git tag android-v0.1.2
+   git push origin android-v0.1.2
    ```
 
 3. CI builds the Rust core and both Android build types. It runs unit tests, lint,
@@ -91,7 +91,7 @@ Use the SDK, NDK, JDK, and Rust setup from README.md. From the repository root:
 Push-Location apps/android
 .\gradlew.bat :app:assembleRelease :app:lintRelease
 Pop-Location
-python scripts/package-android.py --apk apps/android/app/build/outputs/apk/release/app-release-unsigned.apk --output artifacts/android-release-0.1.1 --secrets-file $SigningSecrets
+python scripts/package-android.py --apk apps/android/app/build/outputs/apk/release/app-release-unsigned.apk --output artifacts/android-release-0.1.2 --secrets-file $SigningSecrets
 ```
 
 Python 3.11 or newer is required. Set `ANDROID_HOME` to the SDK directory and keep
@@ -126,17 +126,13 @@ Run the standard Android checks and both release checks:
 python -m unittest discover -s scripts -p test_android_release.py
 Push-Location apps/android
 .\gradlew.bat :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest :app:assembleRelease :app:lintRelease
-Pop-Location
-python scripts/create-android-update-fixtures.py
-Push-Location apps/android
-.\gradlew.bat :app:assembleDebugAndroidTest
 .\gradlew.bat :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=net.anibel.app.AndroidUpdateTest
 Pop-Location
 ```
 
-`create-android-update-fixtures.py` uses the debug keystore created by
-`assembleDebug`. It makes three small test APKs without the release key. These
-fixtures are included in the test APK only.
+`assembleDebugAndroidTest` runs `generateUpdateFixtures`, which reads the debug
+keystore path from Gradle's signing configuration. It makes three small test APKs
+without the release key. These fixtures are included in the test APK only.
 
 `AndroidUpdateTest` uses local fixtures. It checks channel filtering, metadata
 bounds, download sizes and checksums, and rejection of invalid, same-version,
