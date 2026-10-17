@@ -1,14 +1,18 @@
 package net.anibel.app
 
 import android.text.Html
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
@@ -19,6 +23,8 @@ internal fun DetailAbout(media: JSONObject, isTv: Boolean, openContent: (() -> U
     val navigator = LocalNavigator.current
     val signedIn = LocalSession.current.optBoolean("authenticated")
     val card = CatalogTitle(media)
+    var showPoster by rememberSaveable(card.id) { mutableStateOf(false) }
+    if (showPoster) card.poster?.let { PosterViewer(it, card.title, card.id) { showPoster = false } }
     val (action, run) = rememberAction()
     val kind = coreData(CoreCommand.MediaKind, json("mediaType" to card.type))
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -53,7 +59,11 @@ internal fun DetailAbout(media: JSONObject, isTv: Boolean, openContent: (() -> U
     Column(Modifier.padding(if (isTv) 0.dp else 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (!isTv) {
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Top) {
-                AppImage(card.poster, null, Modifier.width(80.dp).aspectRatio(2f / 3f).clip(MaterialTheme.shapes.medium), contentScale = ContentScale.Crop)
+                AppImage(card.poster, ui(R.string.open_poster),
+                    Modifier.width(if (LocalConfiguration.current.screenWidthDp >= 600) 128.dp else 96.dp)
+                        .aspectRatio(2f / 3f).clip(MaterialTheme.shapes.medium)
+                        .clickable(enabled = card.poster != null) { showPoster = true }.testTag("detail_poster"),
+                    contentScale = ContentScale.Crop)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(card.title, style = MaterialTheme.typography.headlineSmall)
                     media.optJSONObject("title")?.text("en")?.takeIf { it != card.title }?.let {

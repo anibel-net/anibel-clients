@@ -330,4 +330,6 @@
     <string name="navigation_expanded">Навігацыя разгорнутая</string>
     <string name="chapters">Главы</string>
     <string name="episodes">Серыі</string>
+    <string name="image_saved">Выява захавана.</string>
+    <string name="open_poster">Адкрыць постар</string>
 </resources>

@@ -330,4 +330,6 @@
     <string name="navigation_expanded">Navigation expanded</string>
     <string name="chapters">Chapters</string>
     <string name="episodes">Episodes</string>
+    <string name="image_saved">Image saved.</string>
+    <string name="open_poster">Open poster</string>
 </resources>
