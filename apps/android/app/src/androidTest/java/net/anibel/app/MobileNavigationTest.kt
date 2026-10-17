@@ -126,7 +126,7 @@ class MobileNavigationTest {
         compose.onNodeWithText(ui(R.string.filter_year)).performClick()
         compose.onNodeWithText("2025").performScrollTo().performClick()
         compose.onNodeWithText(ui(R.string.done), substring = true).performClick()
-        compose.onNodeWithText(ui(R.string.filters_count, 1), useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription(ui(R.string.filters_count, 1)).assertIsDisplayed()
     }
 
     @Test

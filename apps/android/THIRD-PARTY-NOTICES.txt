@@ -1,9 +1,11 @@
 Anibel.Net for Android - third-party notices
 
 The application includes AndroidX (Compose, Activity, Lifecycle, Media3,
-DocumentFile and Core), Kotlin and kotlinx.coroutines, Coil, OkHttp and Okio.
+DocumentFile and Core), Material Components for Android, Kotlin and
+kotlinx.coroutines, Coil, OkHttp and Okio.
 These projects use the Apache License 2.0. Their source repositories are:
 https://android.googlesource.com/platform/frameworks/support/
+https://github.com/material-components/material-components-android
 https://github.com/androidx/media
 https://github.com/JetBrains/kotlin
 https://github.com/Kotlin/kotlinx.coroutines

@@ -76,6 +76,7 @@ tasks.matching { it.name == "mergeDebugAndroidTestAssets" }.configureEach { depe
 kotlin { jvmToolchain(17) }
 
 dependencies {
+    implementation(libs.material.components)
     testImplementation("junit:junit:4.13.2")
     implementation("io.github.peerless2012:ass-media:0.5.1")
     implementation("io.github.peerless2012:ass-kt:0.5.1")

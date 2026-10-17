@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -79,10 +80,12 @@ internal fun CatalogScreen(catalog: AppPage, isTv: Boolean, modifier: Modifier =
         }
     }
     if (model.state == LoadState.Loading && model.titles.isEmpty()) LoadingContent(Modifier.fillMaxSize().testTag("loading"))
-    if (!isTv) ExtendedFloatingActionButton(onClick = { showFilters = true },
+    if (!isTv) FloatingActionButton(onClick = { showFilters = true },
         modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("filters"),
-        icon = { Icon(painterResource(R.drawable.ic_filter), null) },
-        text = { Text(if (model.selected.isEmpty()) ui(R.string.filters) else ui(R.string.filters_count, model.selected.values.sumOf { it.size })) })
+    ) {
+        Icon(painterResource(R.drawable.ic_filter),
+            if (model.selected.isEmpty()) ui(R.string.filters) else ui(R.string.filters_count, model.selected.values.sumOf { it.size }))
+    }
     }
     }
     if (showFilters) FiltersDialog(model, isTv) { showFilters = false }
@@ -171,38 +174,41 @@ private fun FiltersDialog(model: CatalogModel, isTv: Boolean, close: () -> Unit)
     var active by rememberSaveable { mutableStateOf(FilterKey.Genre) }
     var query by rememberSaveable { mutableStateOf("") }
     val selectedKey = active.takeIf { it in model.options } ?: model.options.keys.firstOrNull()
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), shape = androidx.compose.ui.graphics.RectangleShape) {
-            Column(Modifier.safeDrawingPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(close) { Icon(painterResource(R.drawable.ic_back), ui(R.string.back)) }
-                    Text(ui(R.string.filters), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
-                    TextButton(model::clear, enabled = model.selected.isNotEmpty()) { Text(ui(R.string.clear_filters)) }
-                }
-                when (model.filterState) {
-                    LoadState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                    LoadState.Failed -> { Text(model.filterError); AppButton(ui(R.string.try_again), false, model::loadFilters) }
-                    LoadState.Ready -> Unit
-                }
-                ChoiceRow(model.options.keys.map { it.label }, selectedKey?.label.orEmpty(), isTv) { label ->
-                    active = model.options.keys.first { it.label == label }; query = ""
-                }
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
-                    placeholder = { Text(ui(R.string.search)) },
-                    leadingIcon = { Icon(painterResource(R.drawable.ic_search), null) })
-                LazyColumn(Modifier.weight(1f).testTag("filter_options"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    val key = selectedKey
-                    if (key != null) items(model.options[key].orEmpty().filter { keyLabel(it).contains(query, ignoreCase = true) }) { value ->
-                        val selected = value in model.selected[key].orEmpty()
-                        ListItem(
-                            headlineContent = { Text(keyLabel(value)) },
-                            trailingContent = { if (key.single) RadioButton(selected, null) else Checkbox(selected, null) },
-                            modifier = Modifier.fillMaxWidth().clickable { model.toggle(key, value) },
-                            colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface))
-                    }
-                }
-                Button(close, Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(ui(R.string.done) + " · " + ui(R.string.titles_count, model.total)) }
+    val tablet = LocalConfiguration.current.screenWidthDp >= 600
+    val content: @Composable () -> Unit = {
+        Column(Modifier.safeDrawingPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(close) { Icon(painterResource(if (tablet) R.drawable.ic_close else R.drawable.ic_back), ui(if (tablet) R.string.cancel else R.string.back)) }
+                Text(ui(R.string.filters), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+                TextButton(model::clear, enabled = model.selected.isNotEmpty()) { Text(ui(R.string.clear_filters)) }
             }
+            when (model.filterState) {
+                LoadState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                LoadState.Failed -> { Text(model.filterError); AppButton(ui(R.string.try_again), false, model::loadFilters) }
+                LoadState.Ready -> Unit
+            }
+            ChoiceRow(model.options.keys.map { it.label }, selectedKey?.label.orEmpty(), isTv) { label ->
+                active = model.options.keys.first { it.label == label }; query = ""
+            }
+            OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
+                placeholder = { Text(ui(R.string.search)) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_search), null) })
+            LazyColumn(Modifier.weight(1f).testTag("filter_options"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val key = selectedKey
+                if (key != null) items(model.options[key].orEmpty().filter { keyLabel(it).contains(query, ignoreCase = true) }) { value ->
+                    val selected = value in model.selected[key].orEmpty()
+                    ListItem(
+                        headlineContent = { Text(keyLabel(value)) },
+                        trailingContent = { if (key.single) RadioButton(selected, null) else Checkbox(selected, null) },
+                        modifier = Modifier.fillMaxWidth().clickable { model.toggle(key, value) },
+                        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent))
+                }
+            }
+            Button(close, Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(ui(R.string.done) + " · " + ui(R.string.titles_count, model.total)) }
         }
+    }
+    if (tablet) MaterialSideSheet(close, content)
+    else Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), shape = androidx.compose.ui.graphics.RectangleShape, content = content)
     }
 }
