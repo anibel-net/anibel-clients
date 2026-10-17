@@ -32,6 +32,10 @@ internal val LocalNavigator = staticCompositionLocalOf { Navigator { _, _ -> } }
 internal val LocalSession = staticCompositionLocalOf { JSONObject() }
 internal val LocalCore = staticCompositionLocalOf<CoreClient> { error("Missing core") }
 
+private fun List<String>.isSearchRoute(): Boolean = lastOrNull()?.let {
+    JSONObject(it).optString("screen") == Screen.Search.name
+} ?: false
+
 internal fun json(vararg fields: Pair<String, Any?>) = JSONObject().apply {
     fields.forEach { (key, value) -> put(key, value ?: JSONObject.NULL) }
 }
@@ -72,11 +76,14 @@ internal fun AppHost(isTv: Boolean, content: @Composable () -> Unit) {
     SystemTheme(isTv) {
         CompositionLocalProvider(LocalCore provides core, LocalNavigator provides navigator, LocalSession provides session) {
             AnimatedContent(targetState = stack, label = "navigation", transitionSpec = {
+                val search = initialState.isSearchRoute() || targetState.isSearchRoute()
                 val duration = if (isTv) 140 else 220
                 val forward = targetState.size > initialState.size
-                (fadeIn(tween(duration)) + slideInHorizontally(tween(duration)) { if (isTv) 0 else if (forward) it / 12 else -it / 12 }) togetherWith
+                if (search) EnterTransition.None togetherWith ExitTransition.None
+                else (fadeIn(tween(duration)) + slideInHorizontally(tween(duration)) { if (isTv) 0 else if (forward) it / 12 else -it / 12 }) togetherWith
                     (fadeOut(tween(duration)) + slideOutHorizontally(tween(duration)) { if (isTv) 0 else if (forward) -it / 12 else it / 12 })
             }) { shownStack ->
+            if (shownStack != stack && (shownStack.isSearchRoute() || stack.isSearchRoute())) return@AnimatedContent
             if (shownStack.isEmpty()) savedPages.SaveableStateProvider("root") { content() }
             else savedPages.SaveableStateProvider("${shownStack.lastIndex}:${shownStack.last()}") {
                 val route = JSONObject(shownStack.last())

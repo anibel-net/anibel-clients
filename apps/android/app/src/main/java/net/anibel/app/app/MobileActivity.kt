@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.border
 import androidx.compose.material3.*
@@ -112,15 +114,20 @@ internal fun MobileApp() {
                         }
                     },
                 ) { padding ->
-                    Box(Modifier.fillMaxSize().padding(padding)) {
-                        androidx.compose.animation.Crossfade(page, label = "main_navigation") { shownPage ->
+                    Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+                        AnimatedContent(page, label = "main_navigation", transitionSpec = {
+                            if (initialState == AppPage.Search || targetState == AppPage.Search)
+                                EnterTransition.None togetherWith ExitTransition.None
+                            else fadeIn(tween()) togetherWith fadeOut(tween())
+                        }) { shownPage ->
+                            if (shownPage != page && (shownPage == AppPage.Search || page == AppPage.Search)) return@AnimatedContent
                             if (shownPage == AppPage.Catalogs) {
                                 Box(Modifier.fillMaxSize().testTag("page_Catalogs")) { CatalogScreen(catalog, false) }
                             } else if (shownPage == AppPage.Favorites) {
                                 Box(Modifier.fillMaxSize().testTag("page_Favorites")) {
                                     PersonalScreen(savedList.key, false, savedCatalog?.mediaType)
                                 }
-                            } else PageContent(shownPage, isTv = false)
+                            } else PageContent(shownPage, isTv = false, onBack = { page = AppPage.Home })
                         }
                     }
                 }

@@ -59,7 +59,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd apps/android && bash gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=net.anibel.app.LocalCoreLifecycleTest,net.anibel.app.LocalPlaybackTest,net.anibel.app.AndroidUpdateTest
+          script: cd apps/android && bash gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=net.anibel.app.LocalCoreLifecycleTest,net.anibel.app.LocalPlaybackTest,net.anibel.app.AndroidUpdateTest,net.anibel.app.SearchNavigationTest
       - name: Save checked release APK
         if: startsWith(github.ref, 'refs/tags/android-v')
         uses: actions/upload-artifact@v4

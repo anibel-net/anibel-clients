@@ -3,7 +3,6 @@ package net.anibel.app
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.border
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.ui.draw.clip
@@ -11,6 +10,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -143,58 +144,66 @@ internal fun PagedTitles(op: CoreCommand, args: JSONObject, isTv: Boolean, reloa
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SearchScreen(isTv: Boolean, onBack: (() -> Unit)? = null) {
+internal fun SearchScreen(isTv: Boolean, onBack: () -> Unit) {
     var input by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var revision by remember { mutableIntStateOf(0) }
     val core = LocalCore.current
     val (action, run) = rememberAction()
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = remember { FocusRequester() }
+    val close = { keyboard?.hide(); onBack() }
     val submit = {
         query = input.trim()
         keyboard?.hide()
         if (query.isNotBlank()) run { core.value(CoreCommand.SearchHistory, json("action" to "add", "query" to query)); revision++ }
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = if (isTv) 24.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SearchBar(state = rememberSearchBarState(), modifier = Modifier.fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SearchBarDefaults.inputFieldShape),
-            colors = SearchBarDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), tonalElevation = 0.dp,
-            inputField = {
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    // The in-layout Material search keeps tablet navigation available. The collapsed-only
+    // SearchBar(state = ...) deliberately disables the software keyboard.
+    SearchBar(expanded = true, onExpandedChange = { if (!it) close() },
+        modifier = Modifier.fillMaxWidth().testTag("search_bar"), windowInsets = WindowInsets(0, 0, 0, 0),
+        colors = SearchBarDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), tonalElevation = 0.dp,
+        inputField = {
             SearchBarDefaults.InputField(query = input, onQueryChange = { input = it },
-                onSearch = { submit() }, expanded = false, onExpandedChange = {},
+                onSearch = { submit() }, expanded = true, onExpandedChange = { if (!it) close() },
+                modifier = Modifier.focusRequester(focus).testTag("search_input"),
                 placeholder = { Text(ui(R.string.search_titles)) },
                 leadingIcon = {
-                    if (!isTv && onBack != null) IconButton(onBack, Modifier.testTag("back")) {
+                    if (!isTv) IconButton(close, Modifier.testTag("back")) {
                         Icon(painterResource(R.drawable.ic_back), ui(R.string.back))
                     } else Icon(painterResource(R.drawable.ic_search), null)
                 },
                 trailingIcon = { if (input.isNotBlank()) IconButton({ input = ""; query = "" }) {
                     Icon(painterResource(R.drawable.ic_close), ui(R.string.remove))
                 } })
-        })
-        if (isTv) AppButton(ui(R.string.search), true, submit, enabled = input.isNotBlank())
-        if (query.isBlank()) {
-            AppText(ui(R.string.recent_searches), isTv)
-            val history = coreData(CoreCommand.SearchHistory, revision = revision)
-            DataContent(history, isTv, { revision++ }) { value ->
-                (value as? JSONArray).strings().forEach { item ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isTv) AppButton(item, true, { input = item; query = item }, Modifier.weight(1f))
-                        else TextButton({ input = item; query = item }, Modifier.weight(1f)) { Text(item, Modifier.fillMaxWidth()) }
-                        AppButton(ui(R.string.remove), isTv, { run { core.value(CoreCommand.SearchHistory, json("action" to "remove", "query" to item)); revision++ } })
+        }) {
+        Column(Modifier.fillMaxSize().imePadding().padding(horizontal = if (isTv) 24.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (isTv) AppButton(ui(R.string.search), true, submit, enabled = input.isNotBlank())
+            if (query.isBlank()) {
+                AppText(ui(R.string.recent_searches), isTv)
+                val history = coreData(CoreCommand.SearchHistory, revision = revision)
+                DataContent(history, isTv, { revision++ }) { value ->
+                    (value as? JSONArray).strings().forEach { item ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isTv) AppButton(item, true, { input = item; query = item }, Modifier.weight(1f))
+                            else TextButton({ input = item; query = item }, Modifier.weight(1f)) { Text(item, Modifier.fillMaxWidth()) }
+                            AppButton(ui(R.string.remove), isTv, { run { core.value(CoreCommand.SearchHistory, json("action" to "remove", "query" to item)); revision++ } })
+                        }
+                    }
+                }
+            } else {
+                val results = coreData(CoreCommand.Search, json("query" to query, "limit" to 100), revision)
+                RefreshablePage(isTv, results == RemoteData.Loading && revision > 0, { revision++ }, Modifier.weight(1f)) {
+                    DataContent(results, isTv, { revision++ }, loadingModifier = Modifier.fillMaxSize()) {
+                        key(query) {
+                            TitleGrid(it as? JSONArray, isTv, contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp), showCount = !isTv)
+                        }
                     }
                 }
             }
-        } else {
-            val results = coreData(CoreCommand.Search, json("query" to query, "limit" to 100), revision)
-            RefreshablePage(isTv, results == RemoteData.Loading && revision > 0, { revision++ }, Modifier.weight(1f)) {
-                DataContent(results, isTv, { revision++ }, loadingModifier = Modifier.fillMaxSize()) {
-                    key(query) {
-                        TitleGrid(it as? JSONArray, isTv, contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp), showCount = !isTv)
-                    }
-                }
-            }
+            ActionStatus(action, isTv)
         }
-        ActionStatus(action, isTv)
     }
 }

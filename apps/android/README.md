@@ -14,6 +14,9 @@ One Kotlin app supports phones, tablets, Android TV, and Google TV.
 - Home uses the Material 3 hero carousel. Tablet slider images use a 240 dp
   height. Each update section is one horizontal row with independent pagination.
   The search bar hides when scrolling down and returns when scrolling up.
+- The search page uses Material 3 expanded search within the page. It focuses
+  the input on entry and permits the software keyboard. Tablet navigation stays
+  available. Search navigation switches without overlapping input fields.
 - At 840 dp, title details place About, compact episode/chapter rows, and Comments
   on the left and related/recommended title lists on the right. Episode rows show
   the date and a watched checkbox, disabled when signed out. Preview images use
@@ -122,6 +125,9 @@ On the API 37.2 phone image, the current Espresso 3.7 test runner fails during
 input setup (`InputManager.getInstance` is absent). Core integration tests run;
 UI flows must currently be checked with emulator input. TV UI tests run on API 36.
 The TV AVD enables hardware keyboard input: use arrow keys and Enter.
+For a software keyboard on an emulator with hardware keyboard input, enable
+Android's "Show virtual keyboard" setting. `SearchNavigationTest` checks focus,
+keyboard visibility, and search transitions in the API 35 CI emulator.
 
 Catalogs load the next page near the end of the grid. Each Home section appears
 once, as a horizontal row. Each row loads its own next page near its end.

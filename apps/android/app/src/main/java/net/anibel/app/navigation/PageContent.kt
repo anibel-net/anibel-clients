@@ -11,7 +11,7 @@ import androidx.tv.material3.Text as TvText
 
 @Composable
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-internal fun PageContent(page: AppPage, isTv: Boolean, modifier: Modifier = Modifier) {
+internal fun PageContent(page: AppPage, isTv: Boolean, modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
     if (page in AppPage.catalogs) {
         CatalogScreen(page, isTv, modifier)
         return
@@ -23,7 +23,7 @@ internal fun PageContent(page: AppPage, isTv: Boolean, modifier: Modifier = Modi
             Modifier.padding(24.dp), style = androidx.tv.material3.MaterialTheme.typography.headlineSmall)
         when (page) {
             AppPage.Home -> HomeScreen(isTv)
-            AppPage.Search -> SearchScreen(isTv)
+            AppPage.Search -> SearchScreen(isTv, onBack)
             AppPage.Favorites -> if (isTv) TvLibraryScreen() else PersonalScreen("favorites", false)
             AppPage.Profile -> ProfileScreen(isTv, edgeToEdge = !isTv)
             AppPage.Download -> DownloadsScreen(isTv)
