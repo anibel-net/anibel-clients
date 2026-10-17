@@ -70,7 +70,7 @@ impl Cache {
         // Old cached comment pages did not include the reply tree.
         let op = match op {
             "comments" => "comments-tree-v1",
-            "media" => "media-rating-v1",
+            "media" => "media-credits-v1",
             _ => op,
         };
         hash(&serde_json::to_string(&(&self.endpoint, &self.scope, op, args)).expect("JSON value"))

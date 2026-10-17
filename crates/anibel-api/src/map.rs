@@ -182,6 +182,13 @@ fn media_detail_from(v: &Value) -> MediaDetail {
         download: str_field(v, "download"),
         instructions: description_field(v, "instructions"),
         franchise: str_field(v, "franchise"),
+        translators: str_vec_opt(v, "translators"),
+        editors: str_vec_opt(v, "editors"),
+        dubbers: str_vec_opt(v, "dubbers"),
+        audio_engineers: str_vec_opt(v, "audioEngineers"),
+        programmers: str_vec_opt(v, "programmers"),
+        typpers: str_vec_opt(v, "typpers"),
+        cleanners: str_vec_opt(v, "cleanners"),
         relations: media_cards_from_field(v, "relations"),
         recommendations: media_cards_from_field(v, "recommendations"),
         episodes: v

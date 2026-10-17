@@ -29,6 +29,12 @@ Native view models may keep display copies and request generations. These preven
 old responses from replacing a newer screen. They are not durable application
 state. Text translation, selected tabs, focus, and view visibility remain native.
 
+Media details include optional localization credit lists: `translators`,
+`editors`, `dubbers`, `audioEngineers`, `programmers`, `typpers`, and `cleanners`.
+The API adapter preserves these role names and contributor names. Native clients
+choose the labels and layout. Older media cache entries without credits are not
+reused.
+
 ## Structure
 
 ```text

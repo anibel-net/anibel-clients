@@ -137,3 +137,33 @@ fn media_detail_maps_franchise_relations_recommendations() {
     assert_eq!(detail.recommendations.len(), 1);
     assert_eq!(detail.recommendations[0].slug, "monster");
 }
+
+#[test]
+fn media_detail_preserves_localization_credits() {
+    let data = json!({
+        "mediaId": "1", "mediaType": "anime", "slug": "title",
+        "translators": ["translator"], "editors": ["editor"], "dubbers": ["dubber"],
+        "audioEngineers": ["engineer"], "programmers": ["programmer"],
+        "typpers": ["typper"], "cleanners": ["cleanner"]
+    });
+    let wire = serde_json::to_value(media_detail(data.clone()).unwrap()).unwrap();
+    for key in [
+        "translators",
+        "editors",
+        "dubbers",
+        "audioEngineers",
+        "programmers",
+        "typpers",
+        "cleanners",
+    ] {
+        assert_eq!(wire[key], data[key]);
+    }
+    let missing = serde_json::to_value(
+        media_detail(json!({
+            "mediaId": "1", "mediaType": "anime", "slug": "title", "translators": null
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(missing.get("translators").is_none());
+}

@@ -158,6 +158,13 @@ public sealed class MediaDetailDto
     public string? Download { get; set; }
     public DescriptionDto? Instructions { get; set; }
     public string? Franchise { get; set; }
+    public string[]? Translators { get; set; }
+    public string[]? Editors { get; set; }
+    public string[]? Dubbers { get; set; }
+    public string[]? AudioEngineers { get; set; }
+    public string[]? Programmers { get; set; }
+    public string[]? Typpers { get; set; }
+    public string[]? Cleanners { get; set; }
     public MediaCard[] Relations { get; set; } = [];
     public MediaCard[] Recommendations { get; set; } = [];
     public EpisodeDto[] Episodes { get; set; } = [];

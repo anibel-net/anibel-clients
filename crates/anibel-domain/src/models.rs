@@ -161,6 +161,20 @@ pub struct MediaDetail {
     pub instructions: Option<Description>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub franchise: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub translators: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub editors: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dubbers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_engineers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub programmers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typpers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleanners: Option<Vec<String>>,
     #[serde(default)]
     pub relations: Vec<MediaCard>,
     #[serde(default)]

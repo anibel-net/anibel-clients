@@ -60,6 +60,13 @@ fragment MediaFields on Media {
   language
   genres
   franchise
+  translators
+  editors
+  dubbers
+  audioEngineers
+  programmers
+  typpers
+  cleanners
   relations {
     ...MediaLinkFields
   }
