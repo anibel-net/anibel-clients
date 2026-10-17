@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -38,6 +39,7 @@ internal fun rememberDownloadEnqueue(): suspend (String, JSONObject) -> Unit {
 internal enum class DownloadFilter { All, Active, Ready }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 internal fun DownloadsScreen(isTv: Boolean) {
     val core = LocalCore.current
     val navigator = LocalNavigator.current
@@ -68,7 +70,12 @@ internal fun DownloadsScreen(isTv: Boolean) {
     }
     RefreshablePage(isTv, data == RemoteData.Loading && revision > 0, { data = RemoteData.Loading; revision++ }, Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text(ui(R.string.find_download)) }, singleLine = true)
+        if (isTv) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text(ui(R.string.find_download)) }, singleLine = true)
+        else SearchBar(state = rememberSearchBarState(), modifier = Modifier.fillMaxWidth(), inputField = {
+            SearchBarDefaults.InputField(query = query, onQueryChange = { query = it }, onSearch = {},
+                expanded = false, onExpandedChange = {}, placeholder = { Text(ui(R.string.find_download)) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_search), null) })
+        })
         ChoiceRow(DownloadFilter.entries.map { it.name }, filter.name, isTv) { filter = DownloadFilter.valueOf(it) }
         ActionStatus(action, isTv)
         DataContent(data, isTv, { revision++ }, loadingModifier = Modifier.fillMaxSize()) { value ->
@@ -78,40 +85,49 @@ internal fun DownloadsScreen(isTv: Boolean) {
                 (filter == DownloadFilter.All || filter == DownloadFilter.Active && status in listOf("queued", "downloading") || filter == DownloadFilter.Ready && status == "completed") &&
                     (item.optString("title") + item.optString("subtitle")).contains(query, ignoreCase = true)
             }
-            AppText(ui(R.string.downloads_summary, all.size, android.text.format.Formatter.formatFileSize(context, all.sumOf { it.optLong("diskBytes") })), isTv)
+            val summary = ui(R.string.downloads_summary, all.size, android.text.format.Formatter.formatFileSize(context, all.sumOf { it.optLong("diskBytes") }))
+            if (isTv) AppText(summary, true)
+            else SettingsGroup { SettingsRow(summary, icon = R.drawable.ic_download) }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                if (rows.isEmpty()) item { AppText(ui(R.string.empty_downloads), isTv) }
+                if (rows.isEmpty()) item {
+                    if (isTv) AppText(ui(R.string.empty_downloads), true)
+                    else SettingsGroup { SettingsRow(ui(R.string.empty_downloads), icon = R.drawable.ic_download) }
+                }
                 items(rows, key = { it.getString("id") }) { item ->
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppText(item.optString("title"), isTv)
-                        AppText("${item.optString("subtitle")} · ${keyLabel(item.optString("status"))} · ${(item.optDouble("progress", 0.0) * 100).toInt()}%", isTv)
-                        when (item.optString("status")) {
-                            "queued" -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                            "downloading" -> LinearProgressIndicator(progress = {
-                                item.optDouble("progress", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 1.0)?.toFloat() ?: 0f
-                            }, modifier = Modifier.fillMaxWidth())
-                        }
-                        item.text("error")?.let { AppText(it, isTv) }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (item.optBoolean("canPlay")) AppButton(ui(R.string.open), isTv, {
-                                if (item.optString("kind") == "manga") navigator.open(Screen.Reader, json("slug" to item.text("slug"),
-                                    "chapter" to item.optDouble("chapter"), "chapters" to item.optJSONArray("chapterList")))
-                                else navigator.open(Screen.Player, json("downloadId" to item.getString("id")))
-                            })
-                            if (item.optBoolean("canRetry")) AppButton(ui(R.string.retry), isTv, { run {
-                                core.value(CoreCommand.DownloadChange, json("id" to item.getString("id"), "action" to "retry"))
-                                context.startForegroundService(Intent(context, DownloadService::class.java))
-                            } }, enabled = !action.busy)
-                            if (item.optString("status") in listOf("queued", "downloading")) AppButton(ui(R.string.cancel), isTv, { run {
-                                core.value(CoreCommand.DownloadChange, json("id" to item.getString("id"), "action" to "cancel"))
-                            } }, enabled = !action.busy)
-                            AppButton(ui(R.string.delete), isTv, { deleting = item }, enabled = !action.busy)
-                            if (item.optBoolean("canSave")) AppButton(ui(R.string.save_folder), isTv, {
-                                exportId = item.getString("id")
-                                exportFolder.launch(null)
-                            }, enabled = !action.busy)
+                    val content: @Composable () -> Unit = {
+                        Column(Modifier.padding(if (isTv) 0.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val supporting = "${item.optString("subtitle")} · ${keyLabel(item.optString("status"))} · ${(item.optDouble("progress", 0.0) * 100).toInt()}%"
+                            if (isTv) { AppText(item.optString("title"), true); AppText(supporting, true) }
+                            else SettingsRow(item.optString("title"), supporting, R.drawable.ic_download)
+                            when (item.optString("status")) {
+                                "queued" -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                                "downloading" -> LinearProgressIndicator(progress = {
+                                    item.optDouble("progress", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 1.0)?.toFloat() ?: 0f
+                                }, modifier = Modifier.fillMaxWidth())
+                            }
+                            item.text("error")?.let { AppText(it, isTv) }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (item.optBoolean("canPlay")) AppButton(ui(R.string.open), isTv, {
+                                    if (item.optString("kind") == "manga") navigator.open(Screen.Reader, json("slug" to item.text("slug"),
+                                        "chapter" to item.optDouble("chapter"), "chapters" to item.optJSONArray("chapterList")))
+                                    else navigator.open(Screen.Player, json("downloadId" to item.getString("id")))
+                                })
+                                if (item.optBoolean("canRetry")) AppButton(ui(R.string.retry), isTv, { run {
+                                    core.value(CoreCommand.DownloadChange, json("id" to item.getString("id"), "action" to "retry"))
+                                    context.startForegroundService(Intent(context, DownloadService::class.java))
+                                } }, enabled = !action.busy)
+                                if (item.optString("status") in listOf("queued", "downloading")) AppButton(ui(R.string.cancel), isTv, { run {
+                                    core.value(CoreCommand.DownloadChange, json("id" to item.getString("id"), "action" to "cancel"))
+                                } }, enabled = !action.busy)
+                                AppButton(ui(R.string.delete), isTv, { deleting = item }, enabled = !action.busy)
+                                if (item.optBoolean("canSave")) AppButton(ui(R.string.save_folder), isTv, {
+                                    exportId = item.getString("id")
+                                    exportFolder.launch(null)
+                                }, enabled = !action.busy)
+                            }
                         }
                     }
+                    if (isTv) content() else SettingsGroup { content() }
                 }
             }
         }

@@ -74,7 +74,7 @@
     <string name="save_profile">Save profile</string>
     <string name="sign_in_saved">Sign in to see your saved titles.</string>
     <string name="appearance">Appearance</string>
-    <string name="system_theme_hint">Uses your device theme and system colors.</string>
+    <string name="system_theme_hint">Choose a light, dark, or system theme.</string>
     <string name="storage">Storage</string>
     <string name="clear_catalog_cache">Clear catalog cache</string>
     <string name="catalog_cache_cleared">Catalog cache cleared.</string>
@@ -321,4 +321,7 @@
     <string name="app_update_install">Install update</string>
     <string name="app_update_check">Check for updates</string>
     <string name="app_update_install_hint">If Android opens settings, allow installs from this app. Then return and select Install update.</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_system">System</string>
 </resources>

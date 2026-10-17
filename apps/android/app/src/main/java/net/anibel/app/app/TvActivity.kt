@@ -29,7 +29,7 @@ import androidx.tv.material3.*
 private const val DrawerScale = 0.8f
 
 class TvActivity : ComponentActivity() {
-    override fun attachBaseContext(base: android.content.Context) { super.attachBaseContext(Language.wrap(base)) }
+    override fun attachBaseContext(base: android.content.Context) { super.attachBaseContext(Appearance.wrap(Language.wrap(base))) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { AppHost(true) { TvApp() } }

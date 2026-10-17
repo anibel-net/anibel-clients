@@ -17,7 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 class MobileActivity : ComponentActivity() {
-    override fun attachBaseContext(base: android.content.Context) { super.attachBaseContext(Language.wrap(base)) }
+    override fun attachBaseContext(base: android.content.Context) { super.attachBaseContext(Appearance.wrap(Language.wrap(base))) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

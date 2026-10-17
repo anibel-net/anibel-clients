@@ -16,8 +16,12 @@ import androidx.tv.material3.LocalContentColor as TvContentColor
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun SystemTheme(isTv: Boolean = false, content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
     val context = LocalContext.current
+    val dark = when (Appearance.current(context)) {
+        AppTheme.System -> isSystemInDarkTheme()
+        AppTheme.Light -> false
+        AppTheme.Dark -> true
+    }
     val colors = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

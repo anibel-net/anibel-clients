@@ -74,7 +74,7 @@
     <string name="save_profile">Захаваць профіль</string>
     <string name="sign_in_saved">Увайдзіце, каб бачыць спіс.</string>
     <string name="appearance">Выгляд</string>
-    <string name="system_theme_hint">Тэма і колеры адпавядаюць наладам прылады.</string>
+    <string name="system_theme_hint">Выберыце светлую, цёмную або сістэмную тэму.</string>
     <string name="storage">Сховішча</string>
     <string name="clear_catalog_cache">Ачысціць кэш каталога</string>
     <string name="catalog_cache_cleared">Кэш каталога ачышчаны</string>
@@ -321,4 +321,7 @@
     <string name="app_update_install">Усталяваць абнаўленне</string>
     <string name="app_update_check">Праверыць абнаўленні</string>
     <string name="app_update_install_hint">Калі Android адкрые налады, дазвольце ўсталяванне з гэтай праграмы. Затым вярніцеся і націсніце «Усталяваць абнаўленне».</string>
+    <string name="theme_dark">Цёмная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_system">Сістэмная</string>
 </resources>

@@ -51,12 +51,16 @@ internal fun ProfileScreen(isTv: Boolean, username: String? = null, edgeToEdge: 
             var password by remember { mutableStateOf("") }
             if (!isTv) Text(ui(R.string.profile), style = MaterialTheme.typography.headlineMedium)
             AppText(ui(R.string.sign_in_hint), isTv)
-            OutlinedTextField(login, { login = it }, Modifier.fillMaxWidth(), label = { Text(ui(R.string.username)) }, singleLine = true, enabled = !action.busy)
-            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(ui(R.string.password)) },
-                visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !action.busy)
-            AppButton(if (action.busy) ui(R.string.signing_in) else ui(R.string.sign_in), isTv, {
-                run { core.value(CoreCommand.Login, json("username" to login.trim(), "password" to password)); password = ""; revision++ }
-            }, modifier = Modifier.fillMaxWidth(), enabled = !action.busy && login.isNotBlank() && password.isNotEmpty())
+            val credentials: @Composable () -> Unit = {
+                OutlinedTextField(login, { login = it }, Modifier.fillMaxWidth(), label = { Text(ui(R.string.username)) }, singleLine = true, enabled = !action.busy)
+                OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(ui(R.string.password)) },
+                    visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !action.busy)
+                AppButton(if (action.busy) ui(R.string.signing_in) else ui(R.string.sign_in), isTv, {
+                    run { core.value(CoreCommand.Login, json("username" to login.trim(), "password" to password)); password = ""; revision++ }
+                }, modifier = Modifier.fillMaxWidth(), enabled = !action.busy && login.isNotBlank() && password.isNotEmpty())
+            }
+            if (isTv) credentials()
+            else SettingsGroup { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) { credentials() } }
         } else {
             DataContent(checkNotNull(profile), isTv, { revision++ }) { value ->
                 val view = value as? JSONObject
@@ -74,14 +78,12 @@ internal fun ProfileScreen(isTv: Boolean, username: String? = null, edgeToEdge: 
         }
         ActionStatus(action, isTv)
         if (username == null && !isTv) {
-            HorizontalDivider()
-            Column {
-                ListItem(headlineContent = { Text(ui(R.string.downloads)) },
-                    leadingContent = { Icon(painterResource(R.drawable.ic_download), null) },
-                    modifier = Modifier.clickable { navigator.open(Screen.Downloads, JSONObject()) })
-                ListItem(headlineContent = { Text(ui(R.string.settings)) },
-                    leadingContent = { Icon(painterResource(R.drawable.ic_settings), null) },
-                    modifier = Modifier.clickable { navigator.open(Screen.Settings, JSONObject()) })
+            SettingsGroup {
+                SettingsRow(ui(R.string.downloads), icon = R.drawable.ic_download,
+                    onClick = { navigator.open(Screen.Downloads, JSONObject()) })
+                HorizontalDivider()
+                SettingsRow(ui(R.string.settings), icon = R.drawable.ic_settings,
+                    onClick = { navigator.open(Screen.Settings, JSONObject()) })
                 if (signedIn) {
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     ListItem(headlineContent = { Text(ui(R.string.sign_out), color = MaterialTheme.colorScheme.error) },

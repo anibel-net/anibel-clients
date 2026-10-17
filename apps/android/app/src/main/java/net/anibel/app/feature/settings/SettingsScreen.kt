@@ -17,38 +17,48 @@ internal fun SettingsScreen(isTv: Boolean) {
     var revision by remember { mutableIntStateOf(0) }
     val version = coreData(CoreCommand.Version, revision = revision)
     if (!isTv) {
-        PageColumn(onRefresh = if (isTv) null else { { revision++ } }, refreshing = revision > 0 && version == RemoteData.Loading) {
+        PageColumn(onRefresh = { revision++ }, refreshing = revision > 0 && version == RemoteData.Loading) {
             Text(ui(R.string.app_language), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            Column {
+            SettingsGroup {
                 AppLanguage.entries.forEach { language ->
-                    ListItem(headlineContent = { Text(language.label) },
-                        leadingContent = { RadioButton(Language.current(context) == language, onClick = null) },
-                        modifier = Modifier.clickable {
+                    SettingsRow(language.label,
+                        trailing = { RadioButton(Language.current(context) == language, onClick = null) },
+                        onClick = {
                             var owner = context
                             while (owner is android.content.ContextWrapper && owner !is android.app.Activity) owner = owner.baseContext
                             (owner as? android.app.Activity)?.let { Language.select(it, language) }
                         })
                 }
             }
-            HorizontalDivider()
-            ListItem(headlineContent = { Text(ui(R.string.appearance)) }, supportingContent = { Text(ui(R.string.system_theme_hint)) })
-            HorizontalDivider()
+            Text(ui(R.string.appearance), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsGroup {
+                AppTheme.entries.forEach { theme ->
+                    SettingsRow(ui(theme.labelId),
+                        trailing = { RadioButton(Appearance.current(context) == theme, onClick = null) },
+                        onClick = { Appearance.select(context, theme) })
+                }
+            }
             Text(ui(R.string.storage), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            Column {
-                ListItem(headlineContent = { Text(ui(R.string.clear_catalog_cache)) }, modifier = Modifier.clickable(enabled = !action.busy) {
+            SettingsGroup {
+                SettingsRow(ui(R.string.clear_catalog_cache), icon = R.drawable.ic_refresh, enabled = !action.busy, onClick = {
                     run { core.value(CoreCommand.ClearCache); action.message = ui(R.string.catalog_cache_cleared) }
                 })
-                ListItem(headlineContent = { Text(ui(R.string.clear_playback_files)) }, supportingContent = { Text(ui(R.string.downloads_kept)) },
-                    modifier = Modifier.clickable(enabled = !action.busy) {
+                HorizontalDivider()
+                SettingsRow(ui(R.string.clear_playback_files), ui(R.string.downloads_kept), R.drawable.ic_download,
+                    enabled = !action.busy, onClick = {
                         run { core.value(CoreCommand.ClearPlaybackAssets); action.message = ui(R.string.playback_files_cleared) }
                     })
             }
             ActionStatus(action, false)
-            HorizontalDivider()
-            ListItem(headlineContent = { Text(ui(R.string.about_app)) }, supportingContent = { Text(ui(R.string.app_version, BuildConfig.VERSION_NAME)) })
-            DataContent(version, false, { revision++ }) { Text(ui(R.string.core_version, (it as? JSONObject)?.optString("version").orEmpty()),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            AppUpdateSection(false)
+            SettingsGroup {
+                SettingsRow(ui(R.string.about_app), ui(R.string.app_version, BuildConfig.VERSION_NAME), R.drawable.ic_more)
+                DataContent(version, false, { revision++ }) {
+                    Text(ui(R.string.core_version, (it as? JSONObject)?.optString("version").orEmpty()),
+                        Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            SettingsGroup { Column(Modifier.padding(16.dp)) { AppUpdateSection(false) } }
         }
         return
     }
@@ -62,7 +72,9 @@ internal fun SettingsScreen(isTv: Boolean) {
             (owner as? android.app.Activity)?.let { Language.select(it, AppLanguage.entries.first { language -> language.label == label }) }
         }
         AppText(ui(R.string.appearance), isTv)
-        AppText(ui(R.string.system_theme_hint), isTv)
+        ChoiceRow(AppTheme.entries.map { ui(it.labelId) }, ui(Appearance.current(context).labelId), isTv) { label ->
+            Appearance.select(context, AppTheme.entries.first { ui(it.labelId) == label })
+        }
         AppText(ui(R.string.about_app), true)
         AppText(ui(R.string.app_version, BuildConfig.VERSION_NAME), true)
         DataContent(version, true, { revision++ }) { AppText(ui(R.string.core_version, (it as? JSONObject)?.optString("version").orEmpty()), true) }
