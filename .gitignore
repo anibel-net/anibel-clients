@@ -32,6 +32,7 @@ Thumbs.db
 
 # Local cache
 artifacts/
+__pycache__/
 
 # Local secrets and signing material
 .env

@@ -82,7 +82,7 @@
     <string name="playback_files_cleared">Часовыя файлы прайгравання ачышчаныя.</string>
     <string name="downloads_kept">Спампаваныя творы застануцца.</string>
     <string name="about">Пра твор</string>
-    <string name="app_version">Anibel.Net для Android · 0.1.0</string>
+    <string name="app_version">Anibel.Net для Android · %1$s</string>
     <string name="find_download">Пошук спампаванага</string>
     <string name="empty_downloads">Тут пакуль нічога няма. Адкрыйце твор, каб спампаваць серыю, раздзел ці файл.</string>
     <string name="open">Адкрыць</string>
@@ -309,4 +309,16 @@
     <string name="player_pip">Відарыс у відарысе</string>
     <string name="player_quality">Якасць відэа</string>
     <string name="player_highest">Найвышэйшая даступная</string>
+    <string name="app_update_debug">Для абнаўленняў усталюйце падпісаны APK з выпускаў GitHub.</string>
+    <string name="app_update_hint">Праверце наяўнасць новых выпускаў Android.</string>
+    <string name="app_update_checking">Праверка абнаўленняў…</string>
+    <string name="app_update_current">Усталявана апошняя версія.</string>
+    <string name="app_update_available">Даступная версія %1$s.</string>
+    <string name="app_update_downloading">Спампоўванне і праверка абнаўлення…</string>
+    <string name="app_update_ready">Версія %1$s гатовая да ўсталявання.</string>
+    <string name="app_update_failed">Не ўдалося абнавіць праграму. Праверце злучэнне і паспрабуйце яшчэ раз.</string>
+    <string name="app_update_download">Спампаваць абнаўленне</string>
+    <string name="app_update_install">Усталяваць абнаўленне</string>
+    <string name="app_update_check">Праверыць абнаўленні</string>
+    <string name="app_update_install_hint">Калі Android адкрые налады, дазвольце ўсталяванне з гэтай праграмы. Затым вярніцеся і націсніце «Усталяваць абнаўленне».</string>
 </resources>

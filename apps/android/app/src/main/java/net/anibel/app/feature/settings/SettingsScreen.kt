@@ -45,9 +45,10 @@ internal fun SettingsScreen(isTv: Boolean) {
             }
             ActionStatus(action, false)
             HorizontalDivider()
-            ListItem(headlineContent = { Text(ui(R.string.about_app)) }, supportingContent = { Text(ui(R.string.app_version)) })
+            ListItem(headlineContent = { Text(ui(R.string.about_app)) }, supportingContent = { Text(ui(R.string.app_version, BuildConfig.VERSION_NAME)) })
             DataContent(version, false, { revision++ }) { Text(ui(R.string.core_version, (it as? JSONObject)?.optString("version").orEmpty()),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            AppUpdateSection(false)
         }
         return
     }
@@ -63,8 +64,9 @@ internal fun SettingsScreen(isTv: Boolean) {
         AppText(ui(R.string.appearance), isTv)
         AppText(ui(R.string.system_theme_hint), isTv)
         AppText(ui(R.string.about_app), true)
-        AppText(ui(R.string.app_version), true)
+        AppText(ui(R.string.app_version, BuildConfig.VERSION_NAME), true)
         DataContent(version, true, { revision++ }) { AppText(ui(R.string.core_version, (it as? JSONObject)?.optString("version").orEmpty()), true) }
+        AppUpdateSection(true)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         AppText(ui(R.string.storage), isTv)

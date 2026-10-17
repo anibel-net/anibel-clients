@@ -38,6 +38,10 @@ Shared application rules remain in the Rust core. See
 
 ## Build
 
+Signed APK releases, GitHub Actions setup, and app updates are described in
+[RELEASING.md](RELEASING.md). Android tags use `android-vX.Y.Z` or
+`android-vX.Y.Z-beta.N` and create draft GitHub releases.
+
 Use Android Studio to open this directory, or run from this directory:
 
 ```powershell

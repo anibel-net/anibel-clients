@@ -82,7 +82,7 @@
     <string name="playback_files_cleared">Playback files cleared.</string>
     <string name="downloads_kept">Downloaded titles are kept.</string>
     <string name="about">About</string>
-    <string name="app_version">Anibel.Net for Android · 0.1.0</string>
+    <string name="app_version">Anibel.Net for Android · %1$s</string>
     <string name="find_download">Find a download</string>
     <string name="empty_downloads">No downloads here. Open a title to download an episode, chapter, or file.</string>
     <string name="open">Open</string>
@@ -309,4 +309,16 @@
     <string name="player_pip">Picture-in-picture</string>
     <string name="player_quality">Video quality</string>
     <string name="player_highest">Highest available</string>
+    <string name="app_update_debug">For updates, install the signed APK from GitHub Releases.</string>
+    <string name="app_update_hint">Check for new Android releases.</string>
+    <string name="app_update_checking">Checking for updates…</string>
+    <string name="app_update_current">The latest version is installed.</string>
+    <string name="app_update_available">Version %1$s is available.</string>
+    <string name="app_update_downloading">Downloading and checking the update…</string>
+    <string name="app_update_ready">Version %1$s is ready to install.</string>
+    <string name="app_update_failed">Cannot update the app. Check your connection and try again.</string>
+    <string name="app_update_download">Download update</string>
+    <string name="app_update_install">Install update</string>
+    <string name="app_update_check">Check for updates</string>
+    <string name="app_update_install_hint">If Android opens settings, allow installs from this app. Then return and select Install update.</string>
 </resources>

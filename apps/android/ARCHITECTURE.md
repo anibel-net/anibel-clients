@@ -16,6 +16,13 @@ CoreCommand; playback inputs and reports have typed adapters. CoreClient.close
 rejects new requests, drains existing calls, and releases its native handle once.
 The application keeps its core for the process lifetime; isolated tests close theirs.
 
+AppUpdateModel owns the Android release check and download for its activity. It
+keeps state across activity recreation and restores a valid pending APK from
+private app files after process restart. AndroidReleaseSource reads the public
+Android release feed and checks bounded downloads. The system installer owns
+installation and user approval. These operations do not use account credentials
+or the media download queue.
+
 Rust owns last-episode and last-chapter selection. Native preferences retain page,
 scroll offset and reading mode only. The former title selection is imported once.
 
